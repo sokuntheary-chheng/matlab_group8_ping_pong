@@ -373,14 +373,6 @@ This is just a warning, not an error. The game still runs fine.
 
 ---
 
-## 👥 Team
-
-| Name | Role |
-|---|---|
-| Sokuntheary Chheng | Team Lead, Architecture, MATLAB Integration |
-| Member 2 | Game Logic, Physics |
-| Member 3 | Visualization, Keyboard Controller |
-
 **Course:** Seminar and Project IV
 **Institution:** Institute of Technology of Cambodia (ITC)
 **Year:** 2 | **Semester:** 2 | **Group:** 8
