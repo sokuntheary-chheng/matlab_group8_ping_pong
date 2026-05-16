@@ -1,4 +1,3 @@
-tee ~/ros2_ws/README.md << 'EOF'
 # 🏓 ROS 2 Pong Game
 
 <div align="center">
