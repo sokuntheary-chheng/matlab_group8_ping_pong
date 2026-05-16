@@ -388,12 +388,6 @@ This is just a warning, not an error. The game still runs fine.
 
 ---
 
-## 📄 License
-
-This project is licensed under the MIT License.
-
----
-
 <div align="center">
 Made with ❤️ using ROS 2 Jazzy + pygame
 </div>
