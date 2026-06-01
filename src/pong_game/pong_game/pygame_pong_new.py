@@ -7,7 +7,7 @@ import threading
 import random
 import numpy as np
 import time
-from pong_game.sound_gen import load_sounds, start_bgm, start_home_bgm, stop_bgm
+from pong_game.sound_gen import load_sounds, start_bgm, stop_bgm
 from pong_game import settings as settings_mod
 
 # Screen
@@ -117,17 +117,23 @@ class PongNode(Node):
         self.last_scorer = 0  # 1 or 2
 
     def reset_game(self):
+        base_speed = float(self.settings.get('gameplay', {}).get('ball_start_speed', 4.0))
+        self.ball_x      = float(WIDTH // 2)
+        self.ball_y      = float(HEIGHT // 2)
+        self.ball_vx     = 0.0
+        self.ball_vy     = 0.0
         self.paddle1_y   = float(HEIGHT // 2)
         self.paddle2_y   = float(HEIGHT // 2)
         self.score1      = 0
         self.score2      = 0
         self.game_status = 1
         self.speed_mult  = 1.0
+        self.countdown_active = False
+        self.countdown_time = 0.0
         self.publish_score_event(0, 'start', '')
-        self.start_countdown(0)
 
     def start_countdown(self, scorer):
-        """Start countdown timer after a score or at game start. scorer = 0 (start), 1 or 2 (who scored)"""
+        """Start countdown timer after a score. scorer = 1 or 2 (who scored)"""
         self.countdown_active = True
         self.countdown_time = 0.0
         self.last_scorer = scorer
@@ -135,8 +141,7 @@ class PongNode(Node):
         self.ball_y = float(HEIGHT // 2)
         self.ball_vx = 0.0
         self.ball_vy = 0.0
-        if scorer != 0:
-            self.speed_mult = 1.0  # Reset speed multiplier only on score, not on game start
+        self.speed_mult = 1.0  # Reset speed multiplier
 
     def update_countdown(self, dt):
         """Update countdown and launch ball when ready. Returns True if countdown finished."""
@@ -145,18 +150,15 @@ class PongNode(Node):
         
         self.countdown_time += dt
         if self.countdown_time >= self.countdown_max:
-            # Launch ball based on who served
+            # Launch ball horizontally toward loser
             base_speed = float(self.settings.get('gameplay', {}).get('ball_start_speed', 4.0))
-            if self.last_scorer == 0:
-                # Game start: random direction
-                self.ball_vx = base_speed * random.choice([-1, 1])
-            elif self.last_scorer == 1:
+            if self.last_scorer == 1:
                 # Player 1 scored, ball goes toward player 2
                 self.ball_vx = base_speed
             else:
                 # Player 2 scored, ball goes toward player 1
                 self.ball_vx = -base_speed
-            self.ball_vy = random.uniform(-2.0, 2.0)
+            self.ball_vy = 0.0
             self.countdown_active = False
             return True
         return False
@@ -235,7 +237,7 @@ def draw_home(screen, buttons, fonts, particles, help_btn, settings_btn):
             random.randint(0, HEIGHT),
             random.choice([CYAN, BLUE, GREEN, PURPLE])))
 
-    title = fonts['title'].render('ROS 2 PONG', True, CYAN)
+    title = fonts['title'].render('🏓 ROS 2 PONG', True, CYAN)
     screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
 
     sub = fonts['medium'].render('Group 8 | ITC Year 2 | Semester 2', True, LIGHT_GRAY)
@@ -351,10 +353,10 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict):
         screen.blit(overlay, (0, 0))
 
         if node.game_status == 2:
-            winner_txt = 'YOU WIN!' if mode == 1 else 'PLAYER 1 WINS!'
+            winner_txt = 'YOU WIN! 🎉' if mode == 1 else 'PLAYER 1 WINS! 🎉'
             color = GREEN
         else:
-            winner_txt = 'AI WINS!' if mode == 1 else 'PLAYER 2 WINS!'
+            winner_txt = 'AI WINS! 🤖' if mode == 1 else 'PLAYER 2 WINS! 🎉'
             color = RED
 
         wtxt = fonts['big'].render(winner_txt, True, color)
@@ -370,7 +372,7 @@ def draw_network(screen, fonts, back_btn):
     screen.fill(DARK_GRAY)
     pygame.draw.rect(screen, BLUE, (0, 0, WIDTH, HEIGHT), 3)
 
-    title = fonts['medium'].render('[NET] Network Multiplayer', True, CYAN)
+    title = fonts['medium'].render('🌐 Network Multiplayer', True, CYAN)
     screen.blit(title, (WIDTH//2 - title.get_width()//2, 40))
 
     lines = [
@@ -405,7 +407,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
     current_section = 0
     sections = ['GAMEPLAY', 'AUDIO', 'DISPLAY', 'CONTROLS', 'ACCESSIBILITY']
     
-    back_btn = Button(WIDTH - 210, HEIGHT - 70, 190, 50, '<- Back to Home', (70,20,20), (130,40,40))
+    back_btn = Button(WIDTH-200, HEIGHT-80, 180, 50, '← Back to Home', (70,20,20), (130,40,40))
     
     def render_gameplay():
         y = 100
@@ -413,11 +415,10 @@ def draw_settings(screen, fonts, settings_dict, clock):
         speed = settings_dict.get('gameplay', {}).get('ball_start_speed', 4.0)
         txt = fonts['small'].render('Ball Starting Speed', True, WHITE)
         screen.blit(txt, (80, y))
-        slider_y = y+40
-        draw_slider(80, slider_y, 500, 24, speed, 2.0, 8.0)
-        if mouse_just_clicked:
-            mx, my = pygame.mouse.get_pos()
-            if 80 <= mx <= 580 and abs(my - slider_y - 12) <= 20:
+        draw_slider(80, y+40, 500, 24, speed, 2.0, 8.0)
+        if pygame.mouse.get_pressed()[0]:
+            mx = pygame.mouse.get_pos()[0]
+            if 80 <= mx <= 580:
                 new_speed = 2.0 + (mx - 80) / 500.0 * 6.0
                 settings_dict['gameplay']['ball_start_speed'] = round(new_speed, 1)
         
@@ -426,11 +427,10 @@ def draw_settings(screen, fonts, settings_dict, clock):
         inc_pct = settings_dict.get('gameplay', {}).get('ball_speed_increase_pct', 5.0)
         txt = fonts['small'].render('Speed Increase per Hit', True, WHITE)
         screen.blit(txt, (80, y))
-        slider_y = y+40
-        draw_slider(80, slider_y, 500, 24, inc_pct / 100.0, 0.01, 0.15)
-        if mouse_just_clicked:
-            mx, my = pygame.mouse.get_pos()
-            if 80 <= mx <= 580 and abs(my - slider_y - 12) <= 20:
+        draw_slider(80, y+40, 500, 24, inc_pct / 100.0, 0.01, 0.15)
+        if pygame.mouse.get_pressed()[0]:
+            mx = pygame.mouse.get_pos()[0]
+            if 80 <= mx <= 580:
                 new_pct = 1.0 + (mx - 80) / 500.0 * 14.0
                 settings_dict['gameplay']['ball_speed_increase_pct'] = round(new_pct, 1)
         
@@ -444,7 +444,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
             c = (40, 120, 40) if settings_dict.get('gameplay', {}).get('winning_score', 5) == s else (60, 60, 60)
             btn = Button(bx, y+40, 100, 44, str(s), c, (80, 150, 80))
             btn.draw(screen, fonts['small'])
-            if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+            if pygame.mouse.get_pressed()[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
                 settings_dict['gameplay']['winning_score'] = s
             bx += 120
         
@@ -458,7 +458,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
             c = (40, 120, 40) if settings_dict.get('gameplay', {}).get('difficulty', 'Normal') == d else (60, 60, 60)
             btn = Button(bx, y+40, 140, 44, d, c, (80, 150, 80))
             btn.draw(screen, fonts['small'])
-            if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+            if pygame.mouse.get_pressed()[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
                 settings_dict['gameplay']['difficulty'] = d
             bx += 160
     
@@ -468,11 +468,10 @@ def draw_settings(screen, fonts, settings_dict, clock):
         mv = settings_dict.get('audio', {}).get('master_volume', 0.8)
         txt = fonts['small'].render(f'Master Volume: {int(mv*100)}%', True, WHITE)
         screen.blit(txt, (80, y))
-        slider_y = y+40
-        draw_slider(80, slider_y, 500, 24, mv, 0.0, 1.0)
-        if mouse_just_clicked:
-            mx, my = pygame.mouse.get_pos()
-            if 80 <= mx <= 580 and abs(my - slider_y - 12) <= 20:
+        draw_slider(80, y+40, 500, 24, mv, 0.0, 1.0)
+        if pygame.mouse.get_pressed()[0]:
+            mx = pygame.mouse.get_pos()[0]
+            if 80 <= mx <= 580:
                 settings_dict['audio']['master_volume'] = round((mx - 80) / 500.0, 2)
         
         y += 90
@@ -480,11 +479,10 @@ def draw_settings(screen, fonts, settings_dict, clock):
         bv = settings_dict.get('audio', {}).get('bgm_volume', 0.4)
         txt = fonts['small'].render(f'Background Music: {int(bv*100)}%', True, WHITE)
         screen.blit(txt, (80, y))
-        slider_y = y+40
-        draw_slider(80, slider_y, 500, 24, bv, 0.0, 1.0)
-        if mouse_just_clicked:
-            mx, my = pygame.mouse.get_pos()
-            if 80 <= mx <= 580 and abs(my - slider_y - 12) <= 20:
+        draw_slider(80, y+40, 500, 24, bv, 0.0, 1.0)
+        if pygame.mouse.get_pressed()[0]:
+            mx = pygame.mouse.get_pos()[0]
+            if 80 <= mx <= 580:
                 settings_dict['audio']['bgm_volume'] = round((mx - 80) / 500.0, 2)
         
         y += 90
@@ -492,11 +490,10 @@ def draw_settings(screen, fonts, settings_dict, clock):
         sv = settings_dict.get('audio', {}).get('sfx_volume', 0.7)
         txt = fonts['small'].render(f'Sound Effects: {int(sv*100)}%', True, WHITE)
         screen.blit(txt, (80, y))
-        slider_y = y+40
-        draw_slider(80, slider_y, 500, 24, sv, 0.0, 1.0)
-        if mouse_just_clicked:
-            mx, my = pygame.mouse.get_pos()
-            if 80 <= mx <= 580 and abs(my - slider_y - 12) <= 20:
+        draw_slider(80, y+40, 500, 24, sv, 0.0, 1.0)
+        if pygame.mouse.get_pressed()[0]:
+            mx = pygame.mouse.get_pos()[0]
+            if 80 <= mx <= 580:
                 settings_dict['audio']['sfx_volume'] = round((mx - 80) / 500.0, 2)
         
         y += 90
@@ -505,7 +502,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         c = (40, 120, 40) if mute else (60, 60, 60)
         btn = Button(80, y, 200, 44, 'Mute: ' + ('ON' if mute else 'OFF'), c, (80, 150, 80))
         btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_dict['audio']['mute'] = not mute
     
     def render_display():
@@ -515,7 +512,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         c = (40, 120, 40) if fs else (60, 60, 60)
         btn = Button(80, y, 220, 44, 'Fullscreen: ' + ('ON' if fs else 'OFF'), c, (80, 150, 80))
         btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_dict['display']['fullscreen'] = not fs
         
         y += 70
@@ -529,7 +526,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         c = (40, 120, 40) if fps else (60, 60, 60)
         btn = Button(80, y, 200, 44, 'Show FPS: ' + ('ON' if fps else 'OFF'), c, (80, 150, 80))
         btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_dict['display']['show_fps'] = not fps
         
         y += 70
@@ -538,7 +535,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         c = (40, 120, 40) if eff else (60, 60, 60)
         btn = Button(80, y, 200, 44, 'Effects: ' + ('ON' if eff else 'OFF'), c, (80, 150, 80))
         btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_dict['display']['effects'] = not eff
     
     def render_controls():
@@ -562,7 +559,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         # Reset button
         btn = Button(80, y, 200, 44, 'Reset to Defaults', (70, 50, 50), (120, 80, 80))
         btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_dict['controls'] = settings_mod.DEFAULTS['controls'].copy()
     
     def render_accessibility():
@@ -572,7 +569,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         c = (40, 120, 40) if cb else (60, 60, 60)
         btn = Button(80, y, 220, 44, 'Colorblind: ' + ('ON' if cb else 'OFF'), c, (80, 150, 80))
         btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_dict['accessibility']['colorblind'] = not cb
         
         y += 70
@@ -581,7 +578,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         c = (40, 120, 40) if lt else (60, 60, 60)
         btn = Button(80, y, 200, 44, 'Large Text: ' + ('ON' if lt else 'OFF'), c, (80, 150, 80))
         btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_dict['accessibility']['large_text'] = not lt
         
         y += 70
@@ -590,7 +587,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         c = (40, 120, 40) if hc else (60, 60, 60)
         btn = Button(80, y, 220, 44, 'High Contrast: ' + ('ON' if hc else 'OFF'), c, (80, 150, 80))
         btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_dict['accessibility']['high_contrast'] = not hc
     
     def draw_slider(x, y, w, h, value, min_v, max_v):
@@ -600,12 +597,9 @@ def draw_settings(screen, fonts, settings_dict, clock):
         pygame.draw.rect(screen, CYAN, (x+4, y+4, inner_w, h-8), border_radius=6)
     
     while running:
-        mouse_just_clicked = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                mouse_just_clicked = True
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     settings_mod.save_settings(settings_dict)
@@ -645,7 +639,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         
         # Back button
         back_btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and back_btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and back_btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_mod.save_settings(settings_dict)
             return
         
@@ -759,7 +753,7 @@ def update_game(node, keys, mode, sounds, particles, trail, settings_dict, dt):
     node.ball_vx = max(-20.0, min(20.0, node.ball_vx))
     node.ball_vy = max(-15.0, min(15.0, node.ball_vy))
 
-    # Scoring - Left side (Player 2 scores)
+    # Scoring
     if node.ball_x <= 0:
         node.score2 += 1
         try:
@@ -769,31 +763,10 @@ def update_game(node, keys, mode, sounds, particles, trail, settings_dict, dt):
         if settings_dict.get('display', {}).get('effects', True):
             for _ in range(15):
                 particles.append(Particle(LEFT_MARGIN, node.ball_y, RED))
-        
-        # Check win condition
-        target_win = settings_dict.get('gameplay', {}).get('winning_score', WIN_SCORE)
-        if node.score2 >= target_win:
-            # Player 2 wins
-            node.game_status = 3
-            try:
-                sounds['win'].play()
-            except Exception:
-                pass
-            w = 'ai' if mode == 1 else 'player2'
-            node.publish_score_event(2, 'win', w)
-            if settings_dict.get('display', {}).get('effects', True):
-                for _ in range(30):
-                    particles.append(Particle(
-                        random.randint(0, WIDTH),
-                        random.randint(0, HEIGHT), RED))
-        else:
-            # No win yet, start countdown
-            node.publish_score_event(2, 'score', '')
-            node.start_countdown(2)
-        
+        node.publish_score_event(2, 'score', '')
+        node.start_countdown(2)
         trail.clear()
 
-    # Scoring - Right side (Player 1 scores)
     elif node.ball_x >= WIDTH:
         node.score1 += 1
         try:
@@ -803,29 +776,39 @@ def update_game(node, keys, mode, sounds, particles, trail, settings_dict, dt):
         if settings_dict.get('display', {}).get('effects', True):
             for _ in range(15):
                 particles.append(Particle(WIDTH-LEFT_MARGIN, node.ball_y, GREEN))
-        
-        # Check win condition
-        target_win = settings_dict.get('gameplay', {}).get('winning_score', WIN_SCORE)
-        if node.score1 >= target_win:
-            # Player 1 wins
-            node.game_status = 2
-            try:
-                sounds['win'].play()
-            except Exception:
-                pass
-            w = 'player1' if mode != 1 else 'player1'
-            node.publish_score_event(1, 'win', w)
-            if settings_dict.get('display', {}).get('effects', True):
-                for _ in range(30):
-                    particles.append(Particle(
-                        random.randint(0, WIDTH),
-                        random.randint(0, HEIGHT), GREEN))
-        else:
-            # No win yet, start countdown
-            node.publish_score_event(1, 'score', '')
-            node.start_countdown(1)
-        
+        node.publish_score_event(1, 'score', '')
+        node.start_countdown(1)
         trail.clear()
+
+    # Win
+    target_win = settings_dict.get('gameplay', {}).get('winning_score', WIN_SCORE)
+    if node.score1 >= target_win:
+        node.game_status = 2
+        try:
+            sounds['win'].play()
+        except Exception:
+            pass
+        w = 'player1' if mode != 1 else 'player1'
+        node.publish_score_event(1, 'win', w)
+        if settings_dict.get('display', {}).get('effects', True):
+            for _ in range(30):
+                particles.append(Particle(
+                    random.randint(0, WIDTH),
+                    random.randint(0, HEIGHT), GREEN))
+
+    elif node.score2 >= target_win:
+        node.game_status = 3
+        try:
+            sounds['win'].play()
+        except Exception:
+            pass
+        w = 'ai' if mode == 1 else 'player2'
+        node.publish_score_event(2, 'win', w)
+        if settings_dict.get('display', {}).get('effects', True):
+            for _ in range(30):
+                particles.append(Particle(
+                    random.randint(0, WIDTH),
+                    random.randint(0, HEIGHT), RED))
 
 # ─── Main ────────────────────────────────────────────────
 def main(args=None):
@@ -846,7 +829,7 @@ def main(args=None):
     clock  = pygame.time.Clock()
 
     sounds = load_sounds(settings)
-    start_home_bgm(settings)
+    bgm_file = start_bgm(settings)
 
     fonts = {
         'title':  pygame.font.Font(None, 95),
@@ -856,24 +839,23 @@ def main(args=None):
         'tiny':   pygame.font.Font(None, 26),
     }
 
-    help_btn = Button(WIDTH - 220, 20, 90, 44, '? Help', (30, 30, 40), (60, 60, 80))
-    settings_btn = Button(WIDTH - 120, 20, 100, 44, 'Settings', (30, 30, 40), (60, 60, 80))
+    help_btn = Button(WIDTH-160, 24, 56, 40, '?', (30, 30, 40), (60, 60, 80))
+    settings_btn = Button(WIDTH-88, 24, 78, 40, 'SETTINGS', (30, 30, 40), (60, 60, 80))
 
     home_buttons = [
         Button(WIDTH//2-220, 210, 440, 68,
-               '[AI]  Single Player',   (20,70,20),  (40,130,40)),
+               '🤖  1.  Single Player',   (20,70,20),  (40,130,40)),
         Button(WIDTH//2-220, 300, 440, 68,
-               '[2P]  Two Players',      (80,50,10),  (150,90,20)),
+               '👥  2.  Two Players',      (80,50,10),  (150,90,20)),
         Button(WIDTH//2-220, 390, 440, 68,
-               '[NET] Across 2 PCs',     (20,40,110), (40,80,190)),
+               '🌐  3.  Across 2 PCs',     (20,40,110), (40,80,190)),
     ]
-    back_btn = Button(WIDTH//2 - 80, HEIGHT - 80, 160, 50, '<- Home', (70,20,20), (130,40,40))
+    back_btn = Button(30, HEIGHT-65, 160, 45, '← Home', (70,20,20), (130,40,40))
 
     state     = 'home'
     mode      = 1
     particles = []
     trail     = []
-    current_bgm = 'home'
 
     running = True
     prev_time = time.time()
@@ -942,30 +924,13 @@ def main(args=None):
                         particles.clear()
                         state = 'game'
 
-        # BGM switching based on state
-        if state == 'home' and current_bgm != 'home':
-            stop_bgm()
-            start_home_bgm(settings)
-            current_bgm = 'home'
-        elif state == 'game' and current_bgm != 'game':
-            stop_bgm()
-            start_bgm(settings)
-            current_bgm = 'game'
-
-        if state == 'home'
+        if state == 'home':
             draw_home(screen, home_buttons, fonts, particles, help_btn, settings_btn)
 
         elif state == 'help':
-            screen.fill(DARK_GRAY)
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 240))
+            overlay.fill((0, 0, 0, 200))
             screen.blit(overlay, (0, 0))
-            
-            # Draw bordered box behind help text
-            box_rect = pygame.Rect(WIDTH//2 - 320, 100, 640, 420)
-            pygame.draw.rect(screen, (30, 30, 50), box_rect, border_radius=16)
-            pygame.draw.rect(screen, CYAN, box_rect, 2, border_radius=16)
-            
             title = fonts['big'].render('HOW TO PLAY', True, CYAN)
             screen.blit(title, (WIDTH//2 - title.get_width()//2, 40))
             lines = [
@@ -973,12 +938,11 @@ def main(args=None):
                 'Player 2: Up / Down',
                 f'First to {settings.get("gameplay",{}).get("winning_score",5)} wins',
                 'Ball speed increases on each paddle hit',
-                'ESC or click anywhere to return'
+                'Press any key or click to return'
             ]
-            y = 140
+            y = 180
             for ln in lines:
-                color = CYAN if 'ESC' in ln else WHITE
-                t = fonts['medium'].render(ln, True, color)
+                t = fonts['medium'].render(ln, True, LIGHT_GRAY)
                 screen.blit(t, (WIDTH//2 - t.get_width()//2, y))
                 y += 56
             pygame.display.flip()
