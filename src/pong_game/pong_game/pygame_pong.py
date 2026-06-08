@@ -877,10 +877,11 @@ def main(args=None):
 
     running = True
     prev_time = time.time()
-    
+
     while running:
         dt = time.time() - prev_time
         prev_time = time.time()
+        dt = max(0.001, min(dt, 0.05))
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -952,7 +953,7 @@ def main(args=None):
             start_bgm(settings)
             current_bgm = 'game'
 
-        if state == 'home'
+        if state == 'home':
             draw_home(screen, home_buttons, fonts, particles, help_btn, settings_btn)
 
         elif state == 'help':
