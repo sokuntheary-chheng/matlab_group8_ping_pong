@@ -2,6 +2,36 @@ import numpy as np
 import pygame
 import tempfile
 import wave
+import threading
+import time
+from pathlib import Path
+
+_SOUND_CACHE = {}
+_BGM_PATH = None
+_HOME_BGM_PATH = None
+_MIXER_LOCK = threading.Lock()
+
+
+def _ensure_mixer(init_args=(44100, -16, 2, 512)):
+    """Ensure pygame mixer is initialized robustly."""
+    try:
+        if not pygame.mixer.get_init():
+            pygame.mixer.pre_init(*init_args)
+            pygame.mixer.init()
+    except Exception:
+        # attempt re-init with safer buffer
+        try:
+            pygame.mixer.quit()
+        except Exception:
+            pass
+        try:
+            pygame.mixer.pre_init(init_args[0], init_args[1], init_args[2], 2048)
+            pygame.mixer.init()
+        except Exception:
+            # last resort: give up silently; callers should guard
+            return False
+    return True
+
 
 def beep(freq=440, dur=0.1, vol=0.3, rate=44100):
     frames = int(dur * rate)
@@ -10,19 +40,53 @@ def beep(freq=440, dur=0.1, vol=0.3, rate=44100):
     fade = np.linspace(1.0, 0.0, frames)
     wave_arr = wave_arr * fade * vol
     arr = (wave_arr * 32767).astype(np.int16)
-    return pygame.sndarray.make_sound(np.column_stack([arr, arr]))
+    try:
+        return pygame.sndarray.make_sound(np.column_stack([arr, arr]))
+    except Exception:
+        return None
 
-def load_sounds():
-    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
-    return {
+
+def load_sounds(settings=None):
+    """Generate and cache common sound effects. Returns dict of sounds."""
+    _ensure_mixer()
+    cache = _SOUND_CACHE
+    if cache:
+        return cache
+
+    sfx = {
         'paddle': beep(480, 0.08, 0.4),
         'wall':   beep(300, 0.06, 0.3),
         'score':  beep(220, 0.35, 0.5),
         'win':    beep(660, 0.6,  0.6),
         'click':  beep(550, 0.05, 0.3),
     }
+    # apply volume multipliers if provided
+    try:
+        mv = 1.0
+        if settings:
+            mv = float(settings.get('audio', {}).get('master_volume', 1.0))
+            sfx_vol = float(settings.get('audio', {}).get('sfx_volume', 0.8))
+        else:
+            sfx_vol = 0.8
+        for k, snd in sfx.items():
+            if snd:
+                try:
+                    snd.set_volume(sfx_vol * mv)
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
-def generate_bgm(rate=44100):
+    cache.update(sfx)
+    return cache
+
+
+def generate_game_bgm(rate=44100):
+    """Generate a temporary WAV file with energetic game melody and return path."""
+    global _BGM_PATH
+    if _BGM_PATH and Path(_BGM_PATH).exists():
+        return _BGM_PATH
+
     notes = {
         'C4': 261.63, 'D4': 293.66, 'E4': 329.63,
         'F4': 349.23, 'G4': 392.00, 'A4': 440.00,
@@ -34,16 +98,6 @@ def generate_bgm(rate=44100):
         ('B4',0.2),('G4',0.2),('E4',0.2),('C4',0.4),
         ('F4',0.2),('A4',0.2),('C5',0.2),('A4',0.4),
         ('G4',0.2),('E4',0.2),('D4',0.2),('C4',0.4),
-        ('G3',0.2),('C4',0.2),('E4',0.2),('G4',0.4),
-        ('A4',0.2),('G4',0.2),('E4',0.2),('C4',0.4),
-        ('D4',0.2),('F4',0.2),('A4',0.2),('C5',0.4),
-        ('G4',0.2),('E4',0.2),('C4',0.2),('REST',0.4),
-    ]
-    bass = [
-        ('C4',0.8),('G3',0.8),
-        ('F4',0.8),('G3',0.8),
-        ('G3',0.8),('C4',0.8),
-        ('D4',0.8),('REST',0.8),
     ]
 
     def make_track(sequence, octave_shift=0, wave_type='sine'):
@@ -68,15 +122,10 @@ def generate_bgm(rate=44100):
             track = np.concatenate([track, segment])
         return track
 
-    mel  = make_track(melody, 0, 'sine')
-    bas  = make_track(bass,   1, 'square')
-    mlen = max(len(mel), len(bas))
-    mel  = np.tile(mel, int(np.ceil(mlen/len(mel))))[:mlen]
-    bas  = np.tile(bas, int(np.ceil(mlen/len(bas))))[:mlen]
-
-    mixed     = np.clip(mel * 0.4 + bas * 0.2, -1.0, 1.0)
-    mixed_int = (mixed * 32767 * 0.5).astype(np.int16)
-    stereo    = np.column_stack([mixed_int, mixed_int])
+    mel = make_track(melody, 0, 'sine')
+    mixed = np.clip(mel * 0.6, -1.0, 1.0)
+    mixed_int = (mixed * 32767 * 0.4).astype(np.int16)
+    stereo = np.column_stack([mixed_int, mixed_int])
 
     tmp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
     with wave.open(tmp.name, 'w') as wf:
@@ -84,14 +133,186 @@ def generate_bgm(rate=44100):
         wf.setsampwidth(2)
         wf.setframerate(rate)
         wf.writeframes(stereo.tobytes())
-    return tmp.name
 
-def start_bgm(volume=0.35):
-    bgm_file = generate_bgm()
-    pygame.mixer.music.load(bgm_file)
-    pygame.mixer.music.set_volume(volume)
-    pygame.mixer.music.play(-1)
-    return bgm_file
+    _BGM_PATH = tmp.name
+    return _BGM_PATH
+
+
+def generate_bgm(rate=44100):
+    """Backward-compatible alias for generate_game_bgm()."""
+    return generate_game_bgm(rate)
+
+
+def generate_home_bgm(rate=44100):
+    """Generate a temporary WAV file with slow ambient home screen melody and return path."""
+    global _HOME_BGM_PATH
+    if _HOME_BGM_PATH and Path(_HOME_BGM_PATH).exists():
+        return _HOME_BGM_PATH
+
+    notes = {
+        'C4': 261.63, 'E4': 329.63, 'G4': 392.00, 'A4': 440.00, 'REST': 0
+    }
+    # Slow, ambient melody for home screen
+    melody = [
+        ('C4', 0.4), ('E4', 0.4), ('G4', 0.4), ('A4', 0.8),
+        ('REST', 0.2), ('A4', 0.4), ('G4', 0.4), ('E4', 0.8),
+        ('REST', 0.2), ('C4', 0.4), ('E4', 0.4), ('G4', 0.4), ('C4', 0.8),
+    ]
+
+    def make_track(sequence, octave_shift=0, wave_type='sine'):
+        track = np.array([], dtype=np.float64)
+        for note, dur in sequence:
+            frames = int(dur * rate)
+            if note == 'REST':
+                segment = np.zeros(frames)
+            else:
+                freq = notes[note] / (2 ** octave_shift)
+                t = np.linspace(0, dur, frames, False)
+                if wave_type == 'sine':
+                    segment = np.sin(2 * np.pi * freq * t)
+                else:
+                    segment = np.sign(np.sin(2 * np.pi * freq * t)) * 0.5
+                attack  = min(int(0.02 * rate), frames)
+                release = min(int(0.1 * rate), frames)
+                env = np.ones(frames)
+                env[:attack]   = np.linspace(0, 1, attack)
+                env[-release:] = np.linspace(1, 0, release)
+                segment = segment * env
+            track = np.concatenate([track, segment])
+        return track
+
+    mel = make_track(melody, 0, 'sine')
+    mixed = np.clip(mel * 0.5, -1.0, 1.0)
+    mixed_int = (mixed * 32767 * 0.3).astype(np.int16)
+    stereo = np.column_stack([mixed_int, mixed_int])
+
+    tmp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+    with wave.open(tmp.name, 'w') as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(rate)
+        wf.writeframes(stereo.tobytes())
+
+    _HOME_BGM_PATH = tmp.name
+    return _HOME_BGM_PATH
+
+
+def start_bgm(settings=None):
+    """Start background music with health checks and volume control."""
+    _ensure_mixer()
+    try:
+        bgm_file = generate_bgm()
+        if not bgm_file:
+            return None
+        with _MIXER_LOCK:
+            try:
+                pygame.mixer.music.load(bgm_file)
+                vol = 0.35
+                if settings:
+                    vol = float(settings.get('audio', {}).get('bgm_volume', vol))
+                    if settings.get('audio', {}).get('mute', False):
+                        vol = 0.0
+                    vol = vol * float(settings.get('audio', {}).get('master_volume', 1.0))
+                pygame.mixer.music.set_volume(vol)
+                pygame.mixer.music.play(-1)
+            except Exception:
+                # try re-init and load once
+                try:
+                    pygame.mixer.quit()
+                    _ensure_mixer()
+                    pygame.mixer.music.load(bgm_file)
+                    pygame.mixer.music.play(-1)
+                except Exception:
+                    return None
+
+        # start a background health-check thread
+        def _health():
+            while True:
+                time.sleep(5)
+                try:
+                    if not pygame.mixer.get_init():
+                        _ensure_mixer()
+                    if not pygame.mixer.music.get_busy():
+                        try:
+                            pygame.mixer.music.play(-1)
+                        except Exception:
+                            # try reload
+                            try:
+                                pygame.mixer.music.load(bgm_file)
+                                pygame.mixer.music.play(-1)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_health, daemon=True)
+        t.start()
+        return bgm_file
+    except Exception:
+        return None
+
 
 def stop_bgm():
-    pygame.mixer.music.stop()
+    try:
+        pygame.mixer.music.stop()
+    except Exception:
+        try:
+            pygame.mixer.quit()
+        except Exception:
+            pass
+
+
+def start_home_bgm(settings=None):
+    """Start home screen background music with health checks and volume control."""
+    _ensure_mixer()
+    try:
+        bgm_file = generate_home_bgm()
+        if not bgm_file:
+            return None
+        with _MIXER_LOCK:
+            try:
+                pygame.mixer.music.load(bgm_file)
+                vol = 0.25
+                if settings:
+                    vol = float(settings.get('audio', {}).get('bgm_volume', vol))
+                    if settings.get('audio', {}).get('mute', False):
+                        vol = 0.0
+                    vol = vol * float(settings.get('audio', {}).get('master_volume', 1.0))
+                pygame.mixer.music.set_volume(vol)
+                pygame.mixer.music.play(-1)
+            except Exception:
+                # try re-init and load once
+                try:
+                    pygame.mixer.quit()
+                    _ensure_mixer()
+                    pygame.mixer.music.load(bgm_file)
+                    pygame.mixer.music.play(-1)
+                except Exception:
+                    return None
+
+        # start a background health-check thread
+        def _health():
+            while True:
+                time.sleep(5)
+                try:
+                    if not pygame.mixer.get_init():
+                        _ensure_mixer()
+                    if not pygame.mixer.music.get_busy():
+                        try:
+                            pygame.mixer.music.play(-1)
+                        except Exception:
+                            # try reload
+                            try:
+                                pygame.mixer.music.load(bgm_file)
+                                pygame.mixer.music.play(-1)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_health, daemon=True)
+        t.start()
+        return bgm_file
+    except Exception:
+        return None
+
