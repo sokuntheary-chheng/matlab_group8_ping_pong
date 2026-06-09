@@ -404,36 +404,39 @@ def draw_settings(screen, fonts, settings_dict, clock):
     running = True
     current_section = 0
     sections = ['GAMEPLAY', 'AUDIO', 'DISPLAY', 'CONTROLS', 'ACCESSIBILITY']
-    
+    _click = [False]
+
     back_btn = Button(WIDTH - 210, HEIGHT - 70, 190, 50, '<- Back to Home', (70,20,20), (130,40,40))
     
     def render_gameplay():
-        y = 100
+        # nonlocal mouse_just_clicked
+        y = 110
+
         # Ball starting speed
         speed = settings_dict.get('gameplay', {}).get('ball_start_speed', 4.0)
-        txt = fonts['small'].render('Ball Starting Speed', True, WHITE)
+        txt = fonts['small'].render(f'Ball Starting Speed:  {speed:.1f}', True, WHITE)
         screen.blit(txt, (80, y))
-        slider_y = y+40
-        draw_slider(80, slider_y, 500, 24, speed, 2.0, 8.0)
-        if mouse_just_clicked:
+        slider_y = y + 36
+        draw_slider(80, slider_y, 500, 20, speed, 2.0, 8.0)
+        if _click[0]:
             mx, my = pygame.mouse.get_pos()
-            if 80 <= mx <= 580 and abs(my - slider_y - 12) <= 20:
+            if 80 <= mx <= 580 and abs(my - slider_y - 10) <= 20:
                 new_speed = 2.0 + (mx - 80) / 500.0 * 6.0
                 settings_dict['gameplay']['ball_start_speed'] = round(new_speed, 1)
-        
+
         y += 80
-        # Speed increase rate
+        # Speed increase per hit
         inc_pct = settings_dict.get('gameplay', {}).get('ball_speed_increase_pct', 5.0)
-        txt = fonts['small'].render('Speed Increase per Hit', True, WHITE)
+        txt = fonts['small'].render(f'Speed Increase per Hit:  {inc_pct:.1f}%', True, WHITE)
         screen.blit(txt, (80, y))
-        slider_y = y+40
-        draw_slider(80, slider_y, 500, 24, inc_pct / 100.0, 0.01, 0.15)
-        if mouse_just_clicked:
+        slider_y = y + 36
+        draw_slider(80, slider_y, 500, 20, inc_pct, 1.0, 15.0)
+        if _click[0]:
             mx, my = pygame.mouse.get_pos()
-            if 80 <= mx <= 580 and abs(my - slider_y - 12) <= 20:
+            if 80 <= mx <= 580 and abs(my - slider_y - 10) <= 20:
                 new_pct = 1.0 + (mx - 80) / 500.0 * 14.0
                 settings_dict['gameplay']['ball_speed_increase_pct'] = round(new_pct, 1)
-        
+
         y += 80
         # Winning score
         txt = fonts['small'].render('Winning Score', True, WHITE)
@@ -441,157 +444,164 @@ def draw_settings(screen, fonts, settings_dict, clock):
         scores = [5, 10, 15, 20]
         bx = 80
         for s in scores:
-            c = (40, 120, 40) if settings_dict.get('gameplay', {}).get('winning_score', 5) == s else (60, 60, 60)
-            btn = Button(bx, y+40, 100, 44, str(s), c, (80, 150, 80))
+            active = settings_dict.get('gameplay', {}).get('winning_score', 5) == s
+            c = (40, 120, 40) if active else (60, 60, 60)
+            btn = Button(bx, y + 36, 100, 40, str(s), c, (80, 150, 80))
             btn.draw(screen, fonts['small'])
-            if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+            if _click[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
                 settings_dict['gameplay']['winning_score'] = s
             bx += 120
-        
-        y += 100
+
+        y += 96
         # Difficulty
         txt = fonts['small'].render('Difficulty', True, WHITE)
         screen.blit(txt, (80, y))
         diffs = ['Easy', 'Normal', 'Hard']
+        diff_colors = {'Easy': (20, 100, 20), 'Normal': (100, 80, 10), 'Hard': (120, 20, 20)}
         bx = 80
         for d in diffs:
-            c = (40, 120, 40) if settings_dict.get('gameplay', {}).get('difficulty', 'Normal') == d else (60, 60, 60)
-            btn = Button(bx, y+40, 140, 44, d, c, (80, 150, 80))
+            active = settings_dict.get('gameplay', {}).get('difficulty', 'Normal') == d
+            c = diff_colors[d] if active else (60, 60, 60)
+            btn = Button(bx, y + 36, 140, 40, d, c, (80, 150, 80))
             btn.draw(screen, fonts['small'])
-            if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+            if _click[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
                 settings_dict['gameplay']['difficulty'] = d
             bx += 160
     
     def render_audio():
-        y = 100
+        # nonlocal mouse_just_clicked
+        y = 110
+
         # Master volume
         mv = settings_dict.get('audio', {}).get('master_volume', 0.8)
-        txt = fonts['small'].render(f'Master Volume: {int(mv*100)}%', True, WHITE)
+        txt = fonts['small'].render(f'Master Volume:  {int(mv * 100)}%', True, WHITE)
         screen.blit(txt, (80, y))
-        slider_y = y+40
-        draw_slider(80, slider_y, 500, 24, mv, 0.0, 1.0)
-        if mouse_just_clicked:
+        slider_y = y + 36
+        draw_slider(80, slider_y, 500, 20, mv, 0.0, 1.0)
+        if _click[0]:
             mx, my = pygame.mouse.get_pos()
-            if 80 <= mx <= 580 and abs(my - slider_y - 12) <= 20:
+            if 80 <= mx <= 580 and abs(my - slider_y - 10) <= 20:
                 settings_dict['audio']['master_volume'] = round((mx - 80) / 500.0, 2)
-        
-        y += 90
+
+        y += 80
         # BGM volume
         bv = settings_dict.get('audio', {}).get('bgm_volume', 0.4)
-        txt = fonts['small'].render(f'Background Music: {int(bv*100)}%', True, WHITE)
+        txt = fonts['small'].render(f'Background Music:  {int(bv * 100)}%', True, WHITE)
         screen.blit(txt, (80, y))
-        slider_y = y+40
-        draw_slider(80, slider_y, 500, 24, bv, 0.0, 1.0)
-        if mouse_just_clicked:
+        slider_y = y + 36
+        draw_slider(80, slider_y, 500, 20, bv, 0.0, 1.0)
+        if _click[0]:
             mx, my = pygame.mouse.get_pos()
-            if 80 <= mx <= 580 and abs(my - slider_y - 12) <= 20:
+            if 80 <= mx <= 580 and abs(my - slider_y - 10) <= 20:
                 settings_dict['audio']['bgm_volume'] = round((mx - 80) / 500.0, 2)
-        
-        y += 90
+
+        y += 80
         # SFX volume
         sv = settings_dict.get('audio', {}).get('sfx_volume', 0.7)
-        txt = fonts['small'].render(f'Sound Effects: {int(sv*100)}%', True, WHITE)
+        txt = fonts['small'].render(f'Sound Effects:  {int(sv * 100)}%', True, WHITE)
         screen.blit(txt, (80, y))
-        slider_y = y+40
-        draw_slider(80, slider_y, 500, 24, sv, 0.0, 1.0)
-        if mouse_just_clicked:
+        slider_y = y + 36
+        draw_slider(80, slider_y, 500, 20, sv, 0.0, 1.0)
+        if _click[0]:
             mx, my = pygame.mouse.get_pos()
-            if 80 <= mx <= 580 and abs(my - slider_y - 12) <= 20:
+            if 80 <= mx <= 580 and abs(my - slider_y - 10) <= 20:
                 settings_dict['audio']['sfx_volume'] = round((mx - 80) / 500.0, 2)
-        
-        y += 90
+
+        y += 80
         # Mute toggle
         mute = settings_dict.get('audio', {}).get('mute', False)
         c = (40, 120, 40) if mute else (60, 60, 60)
-        btn = Button(80, y, 200, 44, 'Mute: ' + ('ON' if mute else 'OFF'), c, (80, 150, 80))
+        label = 'Mute: ON  (click to turn off)' if mute else 'Mute: OFF  (click to mute all)'
+        btn = Button(80, y, 360, 40, label, c, (80, 150, 80))
         btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if _click[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_dict['audio']['mute'] = not mute
     
     def render_display():
-        y = 100
-        # Fullscreen toggle
-        fs = settings_dict.get('display', {}).get('fullscreen', False)
-        c = (40, 120, 40) if fs else (60, 60, 60)
-        btn = Button(80, y, 220, 44, 'Fullscreen: ' + ('ON' if fs else 'OFF'), c, (80, 150, 80))
-        btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
-            settings_dict['display']['fullscreen'] = not fs
-        
-        y += 70
-        # Resolution (informational for now)
-        txt = fonts['small'].render('Resolution: 1280x720', True, LIGHT_GRAY)
+        # nonlocal mouse_just_clicked
+        y = 110
+
+        toggles = [
+            ('fullscreen', 'display', 'Fullscreen Window'),
+            ('show_fps',   'display', 'Show FPS Counter'),
+            ('effects',    'display', 'Particle Effects'),
+            ('court',      'display', 'Show Court Lines'),
+        ]
+
+        for key, section, label in toggles:
+            val = settings_dict.get(section, {}).get(key, True)
+            c = (40, 120, 40) if val else (60, 60, 60)
+            status = 'ON' if val else 'OFF'
+            btn = Button(80, y, 300, 40, f'{label}:  {status}', c, (80, 150, 80))
+            btn.draw(screen, fonts['small'])
+            if _click[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
+                settings_dict[section][key] = not val
+            y += 66
+
+        # Resolution info only
+        txt = fonts['tiny'].render('Resolution: 1280 x 720  (fixed)', True, LIGHT_GRAY)
         screen.blit(txt, (80, y))
-        
-        y += 70
-        # Show FPS
-        fps = settings_dict.get('display', {}).get('show_fps', False)
-        c = (40, 120, 40) if fps else (60, 60, 60)
-        btn = Button(80, y, 200, 44, 'Show FPS: ' + ('ON' if fps else 'OFF'), c, (80, 150, 80))
-        btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
-            settings_dict['display']['show_fps'] = not fps
-        
-        y += 70
-        # Effects
-        eff = settings_dict.get('display', {}).get('effects', True)
-        c = (40, 120, 40) if eff else (60, 60, 60)
-        btn = Button(80, y, 200, 44, 'Effects: ' + ('ON' if eff else 'OFF'), c, (80, 150, 80))
-        btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
-            settings_dict['display']['effects'] = not eff
     
     def render_controls():
-        y = 100
-        txt = fonts['small'].render('Current Key Bindings', True, CYAN)
+        # nonlocal mouse_just_clicked
+        y = 110
+
+        txt = fonts['small'].render('Current Key Bindings  (editing not yet supported)', True, CYAN)
         screen.blit(txt, (80, y))
         y += 50
-        
-        controls_text = [
-            f"P1 Up:    {settings_dict.get('controls', {}).get('p1_up', 'w').upper()}",
-            f"P1 Down:  {settings_dict.get('controls', {}).get('p1_down', 's').upper()}",
-            f"P2 Up:    {settings_dict.get('controls', {}).get('p2_up', 'up').upper()}",
-            f"P2 Down:  {settings_dict.get('controls', {}).get('p2_down', 'down').upper()}",
+
+        bindings = [
+            ('Player 1 Move Up',   'controls', 'p1_up',   'W'),
+            ('Player 1 Move Down', 'controls', 'p1_down', 'S'),
+            ('Player 2 Move Up',   'controls', 'p2_up',   'UP'),
+            ('Player 2 Move Down', 'controls', 'p2_down', 'DOWN'),
         ]
-        for line in controls_text:
-            t = fonts['small'].render(line, True, LIGHT_GRAY)
+
+        for label, section, key, default in bindings:
+            val = settings_dict.get(section, {}).get(key, default).upper()
+            # Label
+            t = fonts['small'].render(label, True, LIGHT_GRAY)
             screen.blit(t, (100, y))
-            y += 50
-        
-        y += 30
-        # Reset button
-        btn = Button(80, y, 200, 44, 'Reset to Defaults', (70, 50, 50), (120, 80, 80))
+            # Key box
+            key_box = pygame.Rect(460, y - 4, 80, 36)
+            pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=6)
+            pygame.draw.rect(screen, CYAN, key_box, 2, border_radius=6)
+            kt = fonts['small'].render(val, True, WHITE)
+            screen.blit(kt, (key_box.centerx - kt.get_width() // 2,
+                             key_box.centery - kt.get_height() // 2))
+            y += 56
+
+        y += 20
+        btn = Button(80, y, 220, 40, 'Reset All to Defaults', (70, 50, 50), (120, 80, 80))
         btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if _click[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_dict['controls'] = settings_mod.DEFAULTS['controls'].copy()
     
     def render_accessibility():
-        y = 100
-        # Colorblind mode
-        cb = settings_dict.get('accessibility', {}).get('colorblind', False)
-        c = (40, 120, 40) if cb else (60, 60, 60)
-        btn = Button(80, y, 220, 44, 'Colorblind: ' + ('ON' if cb else 'OFF'), c, (80, 150, 80))
-        btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
-            settings_dict['accessibility']['colorblind'] = not cb
-        
-        y += 70
-        # Large text
-        lt = settings_dict.get('accessibility', {}).get('large_text', False)
-        c = (40, 120, 40) if lt else (60, 60, 60)
-        btn = Button(80, y, 200, 44, 'Large Text: ' + ('ON' if lt else 'OFF'), c, (80, 150, 80))
-        btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
-            settings_dict['accessibility']['large_text'] = not lt
-        
-        y += 70
-        # High contrast
-        hc = settings_dict.get('accessibility', {}).get('high_contrast', False)
-        c = (40, 120, 40) if hc else (60, 60, 60)
-        btn = Button(80, y, 220, 44, 'High Contrast: ' + ('ON' if hc else 'OFF'), c, (80, 150, 80))
-        btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and btn.rect.collidepoint(pygame.mouse.get_pos()):
-            settings_dict['accessibility']['high_contrast'] = not hc
+        # nonlocal mouse_just_clicked
+        y = 110
+
+        options = [
+            ('colorblind',    'accessibility', 'Colorblind Mode',
+             'Changes court color for red-green colorblindness'),
+            ('large_text',    'accessibility', 'Large Text Mode',
+             'Increases font sizes (requires restart)'),
+            ('high_contrast', 'accessibility', 'High Contrast Mode',
+             'All game objects rendered in white'),
+        ]
+
+        for key, section, label, desc in options:
+            val = settings_dict.get(section, {}).get(key, False)
+            c = (40, 120, 40) if val else (60, 60, 60)
+            status = 'ON' if val else 'OFF'
+            btn = Button(80, y, 260, 40, f'{label}:  {status}', c, (80, 150, 80))
+            btn.draw(screen, fonts['small'])
+            if _click[0] and btn.rect.collidepoint(pygame.mouse.get_pos()):
+                settings_dict[section][key] = not val
+            # Description text
+            dt = fonts['tiny'].render(desc, True, LIGHT_GRAY)
+            screen.blit(dt, (90, y + 46))
+            y += 90
     
     def draw_slider(x, y, w, h, value, min_v, max_v):
         pygame.draw.rect(screen, LIGHT_GRAY, (x, y, w, h), border_radius=6)
@@ -600,12 +610,12 @@ def draw_settings(screen, fonts, settings_dict, clock):
         pygame.draw.rect(screen, CYAN, (x+4, y+4, inner_w, h-8), border_radius=6)
     
     while running:
-        mouse_just_clicked = False
+        _click[0] = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return
             if event.type == pygame.MOUSEBUTTONDOWN:
-                mouse_just_clicked = True
+                _click[0] = True
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     settings_mod.save_settings(settings_dict)
@@ -620,16 +630,27 @@ def draw_settings(screen, fonts, settings_dict, clock):
         # Header
         title = fonts['big'].render('SETTINGS', True, CYAN)
         screen.blit(title, (WIDTH//2 - title.get_width()//2, 20))
+
+        # Divider line under title
+        pygame.draw.line(screen, LIGHT_GRAY, (40, 62), (WIDTH - 40, 62), 1)
         
-        # Section tabs
-        tab_y = 70
+        # Section tabs - evenly spaced across full width
+        tab_y = 75
+        tab_w = WIDTH // len(sections)
         for i, sec in enumerate(sections):
             col = CYAN if i == current_section else LIGHT_GRAY
             t = fonts['small'].render(sec, True, col)
-            x_pos = 80 + i * 220
+            x_pos = i * tab_w + (tab_w // 2) - t.get_width() // 2
             screen.blit(t, (x_pos, tab_y))
             if i == current_section:
-                pygame.draw.line(screen, CYAN, (x_pos, tab_y + 40), (x_pos + t.get_width(), tab_y + 40), 3)
+                pygame.draw.line(screen, CYAN,
+                    (x_pos, tab_y + 36),
+                    (x_pos + t.get_width(), tab_y + 36), 3)
+            # Draw divider between tabs
+            if i > 0:
+                pygame.draw.line(screen, LIGHT_GRAY,
+                    (i * tab_w, tab_y),
+                    (i * tab_w, tab_y + 40), 1)
         
         # Render current section
         if current_section == 0:
@@ -645,7 +666,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         
         # Back button
         back_btn.draw(screen, fonts['small'])
-        if mouse_just_clicked and back_btn.rect.collidepoint(pygame.mouse.get_pos()):
+        if _click[0] and back_btn.rect.collidepoint(pygame.mouse.get_pos()):
             settings_mod.save_settings(settings_dict)
             return
         
@@ -856,16 +877,16 @@ def main(args=None):
         'tiny':   pygame.font.Font(None, 26),
     }
 
-    help_btn = Button(WIDTH - 220, 20, 90, 44, '? Help', (30, 30, 40), (60, 60, 80))
+    help_btn = Button(WIDTH - 220, 20, 90, 44, 'Help', (30, 30, 40), (60, 60, 80))
     settings_btn = Button(WIDTH - 120, 20, 100, 44, 'Settings', (30, 30, 40), (60, 60, 80))
 
     home_buttons = [
         Button(WIDTH//2-220, 210, 440, 68,
-               '[AI]  Single Player',   (20,70,20),  (40,130,40)),
+               'Single Player',   (20,70,20),  (40,130,40)),
         Button(WIDTH//2-220, 300, 440, 68,
-               '[2P]  Two Players',      (80,50,10),  (150,90,20)),
+               'Two Players',      (80,50,10),  (150,90,20)),
         Button(WIDTH//2-220, 390, 440, 68,
-               '[NET] Across 2 PCs',     (20,40,110), (40,80,190)),
+               'Across 2 PCs',     (20,40,110), (40,80,190)),
     ]
     back_btn = Button(WIDTH//2 - 80, HEIGHT - 80, 160, 50, '<- Home', (70,20,20), (130,40,40))
 
@@ -973,8 +994,7 @@ def main(args=None):
                 'Player 1: W / S',
                 'Player 2: Up / Down',
                 f'First to {settings.get("gameplay",{}).get("winning_score",5)} wins',
-                'Ball speed increases on each paddle hit',
-                'ESC or click anywhere to return'
+                'Ball speed increases on each paddle hit'
             ]
             y = 140
             for ln in lines:
