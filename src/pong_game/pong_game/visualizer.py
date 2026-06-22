@@ -32,17 +32,26 @@ class PongVisualizer(Node):
     def state_callback(self, msg):
         markers = MarkerArray()
 
+        # Scale pixel coords → rviz2 meters
+        # pygame window: 1280x720 → rviz2 field: 10 x 6.3 meters
+        FIELD_W = 10.0
+        FIELD_H = 6.3
+        ball_x_m = (msg.ball_x / 1280.0 - 0.5) * FIELD_W
+        ball_y_m = (0.5 - msg.ball_y / 720.0) * FIELD_H
+        p1_y_m = (0.5 - msg.paddle1_y / 720.0) * FIELD_H
+        p2_y_m = (0.5 - msg.paddle2_y / 720.0) * FIELD_H
+
         # Ball (white)
         markers.markers.append(
-            self.make_marker(0, msg.ball_x, msg.ball_y, 0.3, 0.3, 0.3, 1.0, 1.0, 1.0))
+            self.make_marker(0, ball_x_m, ball_y_m, 0.3, 0.3, 0.3, 1.0, 1.0, 1.0))
 
         # Paddle 1 left (green)
         markers.markers.append(
-            self.make_marker(1, -4.75, msg.paddle1_y, 0.3, 1.5, 0.3, 0.0, 1.0, 0.0))
+            self.make_marker(1, -4.75, p1_y_m, 0.3, 1.5, 0.3, 0.0, 1.0, 0.0))
 
         # Paddle 2 right (red)
         markers.markers.append(
-            self.make_marker(2, 4.75, msg.paddle2_y, 0.3, 1.5, 0.3, 1.0, 0.0, 0.0))
+            self.make_marker(2, 4.75, p2_y_m, 0.3, 1.5, 0.3, 1.0, 0.0, 0.0))
 
         # Top wall (blue)
         markers.markers.append(

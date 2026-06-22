@@ -27,6 +27,7 @@ setup(
             'keyboard_controller = pong_game.keyboard_controller:main',
             'visualizer = pong_game.visualizer:main',
             'pygame_pong = pong_game.pygame_pong:main',
+            'pong_client = pong_game.pong_client:main',
         ],
     },
 )

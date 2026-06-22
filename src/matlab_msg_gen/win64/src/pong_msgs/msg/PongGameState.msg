@@ -12,7 +12,5 @@ float32 paddle2_y
 int32 score_player1
 int32 score_player2
 
-# Game status: 
-# 0=waiting, 1=playing, 2=player1 wins, 3=player2 wins
+# Game status: 0=waiting, 1=playing, 2=player1 wins, 3=player2 wins
 int32 game_status
-

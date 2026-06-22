@@ -12,7 +12,11 @@ class PongGameLogic(Node):
 
         # Subscriber for paddle input
         self.subscription = self.create_subscription(
-            PongGameState, '/pong/paddle_input', self.paddle_callback, 10)
+            PongGameState,          # message type to listen for
+            '/pong/paddle_input',   # topic to listen on
+            self.paddle_callback,   # function called when message arrives
+            10                      # queue size
+        )
 
         # Game state
         self.ball_x = 0.0
@@ -32,10 +36,11 @@ class PongGameLogic(Node):
 
         # Timer 20Hz
         self.timer = self.create_timer(0.05, self.update_game)
+        # Calls update_game() every 0.05 seconds = 20Hz
         self.get_logger().info('Pong Game Logic started!')
 
     def paddle_callback(self, msg):
-        self.paddle1_y = msg.paddle1_y
+        self.paddle1_y = msg.paddle1_y   # extract data from message
         self.paddle2_y = msg.paddle2_y
 
     def update_game(self):

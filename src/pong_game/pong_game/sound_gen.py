@@ -12,7 +12,7 @@ _HOME_BGM_PATH = None
 _MIXER_LOCK = threading.Lock()
 
 
-def _ensure_mixer(init_args=(44100, -16, 2, 512)):
+def _ensure_mixer(init_args=(44100, -16, 2, 2048)):
     """Ensure pygame mixer is initialized robustly."""
     try:
         if not pygame.mixer.get_init():
@@ -32,7 +32,7 @@ def _ensure_mixer(init_args=(44100, -16, 2, 512)):
             return False
     return True
 
-
+# Sound Generation
 def beep(freq=440, dur=0.1, vol=0.3, rate=44100):
     frames = int(dur * rate)
     t = np.linspace(0, dur, frames, False)
@@ -94,37 +94,45 @@ def generate_game_bgm(rate=44100):
         'REST': 0
     }
     melody = [
-        ('C4',0.2),('E4',0.2),('G4',0.2),('C5',0.4),
-        ('B4',0.2),('G4',0.2),('E4',0.2),('C4',0.4),
-        ('F4',0.2),('A4',0.2),('C5',0.2),('A4',0.4),
-        ('G4',0.2),('E4',0.2),('D4',0.2),('C4',0.4),
+        ('C4', 0.2), ('E4', 0.2), ('G4', 0.2), ('C5', 0.4),
+        ('B4', 0.2), ('G4', 0.2), ('E4', 0.2), ('C4', 0.4),
+        ('F4', 0.2), ('A4', 0.2), ('C5', 0.2), ('A4', 0.4),
+        ('G4', 0.2), ('E4', 0.2), ('D4', 0.2), ('C4', 0.4),
     ]
 
-    def make_track(sequence, octave_shift=0, wave_type='sine'):
+    def make_track(sequence):
         track = np.array([], dtype=np.float64)
         for note, dur in sequence:
             frames = int(dur * rate)
             if note == 'REST':
                 segment = np.zeros(frames)
             else:
-                freq = notes[note] / (2 ** octave_shift)
+                freq = notes[note]
                 t = np.linspace(0, dur, frames, False)
-                if wave_type == 'sine':
-                    segment = np.sin(2 * np.pi * freq * t)
-                else:
-                    segment = np.sign(np.sin(2 * np.pi * freq * t)) * 0.5
-                attack  = min(int(0.01 * rate), frames)
-                release = min(int(0.05 * rate), frames)
+                # use sine wave
+                segment = np.sin(2 * np.pi * freq * t)
+                # longer attack and release to avoid clicks
+                attack  = min(int(0.02 * rate), frames // 3)
+                release = min(int(0.08 * rate), frames // 3)
                 env = np.ones(frames)
                 env[:attack]   = np.linspace(0, 1, attack)
                 env[-release:] = np.linspace(1, 0, release)
                 segment = segment * env
+            # crossfade join — blend last 64 samples with next segment start
+            if len(track) > 64 and len(segment) > 64:
+                fade_out = np.linspace(1, 0, 64)
+                fade_in  = np.linspace(0, 1, 64)
+                track[-64:] = track[-64:] * fade_out + segment[:64] * fade_in
+                segment = segment[64:]
             track = np.concatenate([track, segment])
         return track
 
-    mel = make_track(melody, 0, 'sine')
-    mixed = np.clip(mel * 0.6, -1.0, 1.0)
-    mixed_int = (mixed * 32767 * 0.4).astype(np.int16)
+    mel = make_track(melody)
+    # normalize to 70% to avoid clipping
+    peak = np.max(np.abs(mel))
+    if peak > 0:
+        mel = mel / peak * 0.70
+    mixed_int = (mel * 32767).astype(np.int16)
     stereo = np.column_stack([mixed_int, mixed_int])
 
     tmp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
@@ -133,7 +141,6 @@ def generate_game_bgm(rate=44100):
         wf.setsampwidth(2)
         wf.setframerate(rate)
         wf.writeframes(stereo.tobytes())
-
     _BGM_PATH = tmp.name
     return _BGM_PATH
 
@@ -159,31 +166,35 @@ def generate_home_bgm(rate=44100):
         ('REST', 0.2), ('C4', 0.4), ('E4', 0.4), ('G4', 0.4), ('C4', 0.8),
     ]
 
-    def make_track(sequence, octave_shift=0, wave_type='sine'):
+    def make_track(sequence):
         track = np.array([], dtype=np.float64)
         for note, dur in sequence:
             frames = int(dur * rate)
             if note == 'REST':
                 segment = np.zeros(frames)
             else:
-                freq = notes[note] / (2 ** octave_shift)
+                freq = notes[note]
                 t = np.linspace(0, dur, frames, False)
-                if wave_type == 'sine':
-                    segment = np.sin(2 * np.pi * freq * t)
-                else:
-                    segment = np.sign(np.sin(2 * np.pi * freq * t)) * 0.5
-                attack  = min(int(0.02 * rate), frames)
-                release = min(int(0.1 * rate), frames)
+                segment = np.sin(2 * np.pi * freq * t)
+                attack  = min(int(0.04 * rate), frames // 3)
+                release = min(int(0.12 * rate), frames // 3)
                 env = np.ones(frames)
                 env[:attack]   = np.linspace(0, 1, attack)
                 env[-release:] = np.linspace(1, 0, release)
                 segment = segment * env
+            if len(track) > 64 and len(segment) > 64:
+                fade_out = np.linspace(1, 0, 64)
+                fade_in  = np.linspace(0, 1, 64)
+                track[-64:] = track[-64:] * fade_out + segment[:64] * fade_in
+                segment = segment[64:]
             track = np.concatenate([track, segment])
         return track
 
-    mel = make_track(melody, 0, 'sine')
-    mixed = np.clip(mel * 0.5, -1.0, 1.0)
-    mixed_int = (mixed * 32767 * 0.3).astype(np.int16)
+    mel = make_track(melody)
+    peak = np.max(np.abs(mel))
+    if peak > 0:
+        mel = mel / peak * 0.60
+    mixed_int = (mel * 32767).astype(np.int16)
     stereo = np.column_stack([mixed_int, mixed_int])
 
     tmp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
@@ -192,7 +203,6 @@ def generate_home_bgm(rate=44100):
         wf.setsampwidth(2)
         wf.setframerate(rate)
         wf.writeframes(stereo.tobytes())
-
     _HOME_BGM_PATH = tmp.name
     return _HOME_BGM_PATH
 
@@ -228,20 +238,13 @@ def start_bgm(settings=None):
         # start a background health-check thread
         def _health():
             while True:
-                time.sleep(5)
+                time.sleep(10)
                 try:
                     if not pygame.mixer.get_init():
                         _ensure_mixer()
-                    if not pygame.mixer.music.get_busy():
-                        try:
+                        with _MIXER_LOCK:
+                            pygame.mixer.music.load(bgm_file)
                             pygame.mixer.music.play(-1)
-                        except Exception:
-                            # try reload
-                            try:
-                                pygame.mixer.music.load(bgm_file)
-                                pygame.mixer.music.play(-1)
-                            except Exception:
-                                pass
                 except Exception:
                     pass
 
@@ -293,20 +296,13 @@ def start_home_bgm(settings=None):
         # start a background health-check thread
         def _health():
             while True:
-                time.sleep(5)
+                time.sleep(10)
                 try:
                     if not pygame.mixer.get_init():
                         _ensure_mixer()
-                    if not pygame.mixer.music.get_busy():
-                        try:
+                        with _MIXER_LOCK:
+                            pygame.mixer.music.load(bgm_file)
                             pygame.mixer.music.play(-1)
-                        except Exception:
-                            # try reload
-                            try:
-                                pygame.mixer.music.load(bgm_file)
-                                pygame.mixer.music.play(-1)
-                            except Exception:
-                                pass
                 except Exception:
                     pass
 

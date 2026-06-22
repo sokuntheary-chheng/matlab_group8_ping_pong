@@ -1,0 +1,30 @@
+function [data, info] = pongGameState
+%PongGameState gives an empty data for pong_msgs/PongGameState
+% Copyright 2019-2021 The MathWorks, Inc.
+data = struct();
+data.MessageType = 'pong_msgs/PongGameState';
+[data.ball_x, info.ball_x] = ros.internal.ros2.messages.ros2.default_type('single',1,0);
+[data.ball_y, info.ball_y] = ros.internal.ros2.messages.ros2.default_type('single',1,0);
+[data.ball_vel_x, info.ball_vel_x] = ros.internal.ros2.messages.ros2.default_type('single',1,0);
+[data.ball_vel_y, info.ball_vel_y] = ros.internal.ros2.messages.ros2.default_type('single',1,0);
+[data.paddle1_y, info.paddle1_y] = ros.internal.ros2.messages.ros2.default_type('single',1,0);
+[data.paddle2_y, info.paddle2_y] = ros.internal.ros2.messages.ros2.default_type('single',1,0);
+[data.score_player1, info.score_player1] = ros.internal.ros2.messages.ros2.default_type('int32',1,0);
+[data.score_player2, info.score_player2] = ros.internal.ros2.messages.ros2.default_type('int32',1,0);
+[data.game_status, info.game_status] = ros.internal.ros2.messages.ros2.default_type('int32',1,0);
+info.MessageType = 'pong_msgs/PongGameState';
+info.constant = 0;
+info.default = 0;
+info.maxstrlen = NaN;
+info.MaxLen = 1;
+info.MinLen = 1;
+info.MatPath = cell(1,9);
+info.MatPath{1} = 'ball_x';
+info.MatPath{2} = 'ball_y';
+info.MatPath{3} = 'ball_vel_x';
+info.MatPath{4} = 'ball_vel_y';
+info.MatPath{5} = 'paddle1_y';
+info.MatPath{6} = 'paddle2_y';
+info.MatPath{7} = 'score_player1';
+info.MatPath{8} = 'score_player2';
+info.MatPath{9} = 'game_status';

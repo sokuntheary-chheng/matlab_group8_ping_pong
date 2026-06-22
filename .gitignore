@@ -1,6 +1,16 @@
 build/
 install/
 log/
-*.pyc
 __pycache__/
+*.pyc
+*.pyo
+.eggs/
 *.egg-info/
+matlab_msg_gen/win64/build/
+matlab_msg_gen/win64/install/
+matlab_msg_gen/win64/log/
+*.dll
+*.lib
+*.exp
+*.obj
+*.mat
