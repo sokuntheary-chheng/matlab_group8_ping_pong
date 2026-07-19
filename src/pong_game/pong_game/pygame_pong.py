@@ -633,7 +633,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
             c = (40, 120, 40) if val else (60, 60, 60)
             hover_c = (40, 120, 40) if val else (90, 90, 90)
             status = 'ON' if val else 'OFF'
-            btn = Button(80, y, 280, 40, f'{label}:  {status}', c, hover_c)
+            btn = Button(80, y, 320, 40, f'{label}:  {status}', c, hover_c)
             btn.draw(screen, fonts['small'])
             if _click[0] and btn.rect.collidepoint(_click_pos[0], _click_pos[1]):
                 settings_dict[section][key] = not val
