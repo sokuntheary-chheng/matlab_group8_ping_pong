@@ -964,6 +964,8 @@ def main(args=None):
     current_bgm = 'home'
     help_tab  = 0
 
+    scroll_offset = 0
+    
     running = True
     prev_time = time.time()
 
@@ -990,14 +992,22 @@ def main(args=None):
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if tab1_rect.collidepoint(event.pos):
                         help_tab = 0
+                        scroll_offset = 0 # reset scroll
                     elif tab2_rect.collidepoint(event.pos):
                         help_tab = 1
                     elif help_back_btn.rect.collidepoint(event.pos):
                         state = 'home'
                         help_tab = 0
+                        scroll_offset = 0
+                if event.type == pygame.MOUSEWHEEL:
+                    if help_tab == 1:
+                        # Scroll Network Setup screen
+                        max_scroll = 400 
+                        scroll_offset = max(0, min(scroll_offset - event.y * 30, max_scroll))
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     state = 'home'
                     help_tab = 0
+                    scroll_offset = 0
 
             elif state == 'home':
                 for i, btn in enumerate(home_buttons):
@@ -1203,7 +1213,7 @@ def main(args=None):
                 screen.blit(ai_note, (WIDTH//2 + 20, y_p2 + 5))
 
                 # ── SECTION 2: GAME RULES ──
-                draw_card(320, 160)
+                draw_card(320, 200)
                 sec2 = fonts['small'].render('GAME RULES', True, YELLOW)
                 screen.blit(sec2, (80, 335))
                 pygame.draw.line(screen, YELLOW, (80, 365), (WIDTH - 80, 365), 1)
@@ -1222,13 +1232,13 @@ def main(args=None):
                     y_rules += 40
 
                 # ── SECTION 3: SHORTCUTS ──
-                draw_card(500, 110)
+                draw_card(530, 110)
                 sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
-                screen.blit(sec3, (80, 515))
-                pygame.draw.line(screen, YELLOW, (80, 545), (WIDTH - 80, 545), 1)
+                screen.blit(sec3, (80, 545))
+                pygame.draw.line(screen, YELLOW, (80, 575), (WIDTH - 80, 575), 1)
 
                 shortcuts = [('ESC', 'Return to Home screen'), ('R', 'Restart current game')]
-                y_s = 565
+                y_s = 595
                 for key, desc in shortcuts:
                     key_box = pygame.Rect(80, y_s - 5, 50, 30)
                     pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=6)
@@ -1240,70 +1250,27 @@ def main(args=None):
                     y_s += 40
             else:
                 # Network setup guide
-                y = 160
-                def draw_header(text, y_pos):
-                    pygame.draw.line(screen, LIGHT_GRAY, (80, y_pos), (WIDTH - 80, y_pos), 1)
-                    txt = fonts['small'].render(text, True, YELLOW)
-                    screen.blit(txt, (80, y_pos + 10))
-                    pygame.draw.line(screen, YELLOW, (80, y_pos + 40), (80 + txt.get_width(), y_pos + 40), 2)
-                    return y_pos + 60
+                y = 150 - scroll_offset
+                def draw_step(header, lines, y_pos):
+                    h = 60 + len(lines) * 25 + 10
+                    draw_card(y_pos, h)
+                    
+                    # Draw header
+                    txt = fonts['small'].render(header, True, YELLOW)
+                    screen.blit(txt, (80, y_pos + 15))
+                    pygame.draw.line(screen, YELLOW, (80, y_pos + 45), (80 + txt.get_width(), y_pos + 45), 2)
+                    
+                    y_content = y_pos + 60
+                    for line in lines:
+                        if isinstance(line, str):
+                            screen.blit(fonts['tiny'].render(line, True, WHITE), (100, y_content))
+                        y_content += 25
+                    return y_pos + h + 10
 
-                def draw_cmd(cmd, y_pos):
-                    cmd_surf = fonts['tiny'].render(cmd, True, BLACK)
-                    cmd_box = pygame.Rect(100, y_pos, cmd_surf.get_width() + 20, 30)
-                    pygame.draw.rect(screen, CYAN, cmd_box, border_radius=4)
-                    screen.blit(cmd_surf, (110, y_pos + 5))
-                    return y_pos + 45
-
-                y = draw_header('STEP 1 — FIND YOUR IP', y)
-                txts = ['Both PCs: Open PowerShell → type ipconfig', 'Look for: Wireless LAN adapter Wi-Fi → IPv4 Address', 'Example: 192.168.43.145', 'OR: Check the Network screen in this game (shows automatically)']
-                for t in txts:
-                    screen.blit(fonts['tiny'].render(t, True, WHITE), (100, y))
-                    y += 25
-                y += 10
-
-                y = draw_header('STEP 2 — CONNECT SAME NETWORK', y)
-                txts = ['Both PCs connect to SAME WiFi or phone hotspot', 'Both IPs must start with same numbers: 192.168.43.x', 'Test: ping <partner_ip> in PowerShell']
-                for t in txts:
-                    screen.blit(fonts['tiny'].render(t, True, WHITE), (100, y))
-                    y += 25
-                y += 10
-
-                y = draw_header('STEP 3 — HOST PC (runs the game)', y)
-                screen.blit(fonts['tiny'].render('Open WSL2 terminal:', True, WHITE), (100, y))
-                y += 25
-                y = draw_cmd('source /opt/ros/jazzy/setup.bash', y)
-                y = draw_cmd('source ~/ros2_ws/install/setup.bash', y)
-                y = draw_cmd('ros2 run pong_game pygame_pong', y)
-                screen.blit(fonts['tiny'].render('Go to Network screen → Click START AS HOST', True, WHITE), (100, y))
-                y += 25
-                screen.blit(fonts['tiny'].render('Your paddle: LEFT side | Controls: W = Up, S = Down', True, WHITE), (100, y))
-                y += 25
-                y += 10
-
-                y = draw_header('STEP 4 — PARTNER PC (keyboard only)', y)
-                screen.blit(fonts['tiny'].render('Option A - Has ROS 2 + WSL2:', True, WHITE), (100, y))
-                y += 25
-                y = draw_cmd('source /opt/ros/jazzy/setup.bash', y)
-                y = draw_cmd('source ~/ros2_ws/install/setup.bash', y)
-                y = draw_cmd('python3 ~/pong_controller.py <HOST_IP>', y)
-                screen.blit(fonts['tiny'].render('Option B - Python on Windows only:', True, WHITE), (100, y))
-                y += 25
-                y = draw_cmd('python C:\\pong_controller.py <HOST_IP>', y)
-                y += 10
-
-                y = draw_header('STEP 5 — VERIFY CONNECTION', y)
-                screen.blit(fonts['tiny'].render('Host terminal shows: "Received from <partner_ip>: paddle2_y=360"', True, WHITE), (100, y))
-                y += 25
-                screen.blit(fonts['tiny'].render('Right paddle moves when partner presses W/S keys', True, WHITE), (100, y))
-                y += 10
-
-                y = draw_header('STEP 6 — PLAY', y)
-                screen.blit(fonts['tiny'].render('Host PC: W/S = Left paddle (Player 1)', True, WHITE), (100, y))
-                y += 25
-                screen.blit(fonts['tiny'].render('Partner: W/S or arrow keys = Right paddle (Player 2)', True, WHITE), (100, y))
-                y += 25
-                screen.blit(fonts['tiny'].render('First to reach winning score wins!', True, WHITE), (100, y))
+                y = draw_step('STEP 1 — FIND YOUR IP', ['Both PCs: Open PowerShell → type ipconfig', 'Look for: Wireless LAN adapter Wi-Fi → IPv4 Address', 'Example: 192.168.43.145', 'OR: Check the Network screen in this game (shows automatically)'], y)
+                y = draw_step('STEP 2 — CONNECT SAME NETWORK', ['Both PCs connect to SAME WiFi or phone hotspot', 'Both IPs must start with same numbers: 192.168.43.x', 'Test: ping <partner_ip> in PowerShell'], y)
+                y = draw_step('STEP 3 — HOST PC', ['Open WSL2 terminal:', 'source /opt/ros/jazzy/setup.bash', 'source ~/ros2_ws/install/setup.bash', 'ros2 run pong_game pygame_pong', 'Go to Network screen → Click START AS HOST'], y)
+                y = draw_step('STEP 4 — PARTNER PC', ['Option A - Has ROS 2 + WSL2:', 'source /opt/ros/jazzy/setup.bash', 'source ~/ros2_ws/install/setup.bash', 'python3 ~/pong_controller.py <HOST_IP>', 'Option B - Python on Windows only:', 'python C:\\pong_controller.py <HOST_IP>'], y)
 
             # Draw back button last so it's on top
             help_back_btn.draw(screen, fonts['small'])
