@@ -361,7 +361,7 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict, clock=
 
     pygame.display.flip()
 
-def draw_network(screen, fonts, host_btn, join_btn, partner_btn, back_btn_local):
+def draw_network(screen, fonts, host_btn, join_btn, back_btn_local):
     """Render network screen - event handling done in main loop"""
     screen.fill(DARK_GRAY)
     pygame.draw.rect(screen, BLUE, (0, 0, WIDTH, HEIGHT), 3)
@@ -395,7 +395,6 @@ def draw_network(screen, fonts, host_btn, join_btn, partner_btn, back_btn_local)
     # Draw buttons
     host_btn.draw(screen, fonts['small'])
     join_btn.draw(screen, fonts['small'])
-    partner_btn.draw(screen, fonts['small'])
     back_btn_local.draw(screen, fonts['small'])
 
     # Bottom hints
@@ -944,7 +943,6 @@ def main(args=None):
     # Network buttons (created once, reused in loop)
     host_btn = Button(WIDTH//2 - 330, 280, 300, 60, '🎮  Start as HOST', (20, 100, 20), (40, 150, 40))
     join_btn = Button(WIDTH//2 + 30, 280, 300, 60, '🔗  Join as CLIENT', (20, 70, 110), (40, 110, 180))
-    partner_btn = Button(WIDTH//2 - 150, 330, 300, 60, '🎮  Start as PARTNER', (100, 60, 20), (180, 100, 40))
     back_btn_network = Button(WIDTH//2 - 150, 380, 300, 60, '←  Back to Home', (70, 20, 20), (130, 40, 40))
     
     # Network join buttons
@@ -1049,16 +1047,6 @@ def main(args=None):
                if join_btn.is_clicked(event):
                    try: sounds['click'].play()
                    except: pass
-                   state = 'network_join'
-               if partner_btn.is_clicked(event):
-                   try: sounds['click'].play()
-                   except: pass
-                   mode = 3
-                   node._network_mode = True
-                   node._network_role = 'CLIENT'
-                   node.reset_game()
-                   trail.clear()
-                   particles.clear()
                    state = 'network_join'
                if back_btn_network.is_clicked(event):
                    try: sounds['click'].play()
@@ -1169,12 +1157,6 @@ def main(args=None):
             pygame.draw.line(screen, LIGHT_GRAY, (0, 135), (WIDTH, 135), 1)
 
             if help_tab == 0:
-                # Title
-                title = fonts['big'].render('HOW TO PLAY', True, CYAN)
-                screen.blit(title, (WIDTH//2 - title.get_width()//2, 150))
-                pygame.draw.line(screen, CYAN,
-                    (WIDTH//2 - 200, 203), (WIDTH//2 + 200, 203), 1)
-
                 # ── SECTION 1: CONTROLS ──
                 sec1 = fonts['small'].render('CONTROLS', True, YELLOW)
                 screen.blit(sec1, (80, 220))
@@ -1333,7 +1315,7 @@ def main(args=None):
             draw_game(screen, node, fonts, mode, particles, trail, settings, clock)
 
         elif state == 'network':
-            draw_network(screen, fonts, host_btn, join_btn, partner_btn, back_btn_network)
+            draw_network(screen, fonts, host_btn, join_btn, back_btn_network)
 
         elif state == 'network_join':
             input_box = draw_network_join(
