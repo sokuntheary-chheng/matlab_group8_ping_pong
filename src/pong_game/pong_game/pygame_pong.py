@@ -943,7 +943,7 @@ def main(args=None):
     # Network buttons (created once, reused in loop)
     host_btn = Button(WIDTH//2 - 330, 280, 300, 60, '🎮  Start as HOST', (20, 100, 20), (40, 150, 40))
     join_btn = Button(WIDTH//2 + 30, 280, 300, 60, '🔗  Join as CLIENT', (20, 70, 110), (40, 110, 180))
-    back_btn_network = Button(WIDTH//2 - 150, 380, 300, 60, '←  Back to Home', (70, 20, 20), (130, 40, 40))
+    back_btn_network = Button(WIDTH//2 - 150, 380, 300, 60, 'Back to Home', (70, 20, 20), (130, 40, 40))
     
     # Network join buttons
     connect_btn = Button(WIDTH//2 - 330, 380, 300, 60, '✓  Connect', (20, 100, 20), (40, 150, 40))
