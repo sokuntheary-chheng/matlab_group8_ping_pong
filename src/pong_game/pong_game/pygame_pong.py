@@ -196,6 +196,12 @@ class PongNode(Node):
             self.paddle2_y = max(half, min(self.paddle2_y, HEIGHT - half))
 
 # ─── Drawing helpers ─────────────────────────────────────
+def draw_card(screen, y, h):
+    card_rect = pygame.Rect(60, y, WIDTH - 120, h)
+    pygame.draw.rect(screen, (30, 30, 40), card_rect, border_radius=15)
+    pygame.draw.rect(screen, (60, 60, 80), card_rect, 2, border_radius=15)
+    return card_rect
+
 def draw_bg(screen, settings_dict):
     if settings_dict.get('display', {}).get('court', True):
         court_color = (10, 80, 40) if not settings_dict.get('accessibility', {}).get('colorblind', False) else (10, 40, 80)
@@ -1000,7 +1006,10 @@ def main(args=None):
                         help_tab = 0
                         scroll_offset = 0
                 if event.type == pygame.MOUSEWHEEL:
-                    if help_tab == 1:
+                    if help_tab == 0:
+                        max_scroll = 200 # Adjustable based on content
+                        scroll_offset = max(0, min(scroll_offset - event.y * 30, max_scroll))
+                    elif help_tab == 1:
                         # Scroll Network Setup screen
                         max_scroll = 400 
                         scroll_offset = max(0, min(scroll_offset - event.y * 30, max_scroll))
@@ -1153,58 +1162,33 @@ def main(args=None):
 
         elif state == 'help':
             screen.fill(DARK_GRAY)
-            # Render tabs
-            tab1_col = CYAN if help_tab == 0 else LIGHT_GRAY
-            tab2_col = CYAN if help_tab == 1 else LIGHT_GRAY
-            screen.fill(DARK_GRAY)
-            # Render tabs
-            tab1_col = CYAN if help_tab == 0 else LIGHT_GRAY
-            tab2_col = CYAN if help_tab == 1 else LIGHT_GRAY
-            
-            # Tab highlight
-            if help_tab == 0:
-                pygame.draw.rect(screen, (40, 40, 60), (WIDTH//2 - 210, 60, 200, 50), border_radius=10)
-            else:
-                pygame.draw.rect(screen, (40, 40, 60), (WIDTH//2 + 10, 60, 200, 50), border_radius=10)
 
-            t1 = fonts['small'].render('How to Play', True, tab1_col)
-            t2 = fonts['small'].render('Network Setup', True, tab2_col)
-            screen.blit(t1, (WIDTH//2 - 200 + (200 - t1.get_width())//2, 70))
-            screen.blit(t2, (WIDTH//2 + 20 + (200 - t2.get_width())//2, 70))
-            pygame.draw.line(screen, LIGHT_GRAY, (0, 115), (WIDTH, 115), 1)
-
-            # Helper function
-            def draw_card(y, h):
-                card_rect = pygame.Rect(60, y, WIDTH - 120, h)
-                pygame.draw.rect(screen, (30, 30, 40), card_rect, border_radius=15)
-                pygame.draw.rect(screen, (60, 60, 80), card_rect, 2, border_radius=15)
-                return card_rect
-
+            # 1. Draw scrollable content first
             if help_tab == 0:
                 # ── SECTION 1: CONTROLS ──
-                draw_card(150, 150)
+                draw_card(screen, 150 - scroll_offset, 150)
                 sec1 = fonts['small'].render('CONTROLS', True, YELLOW)
-                screen.blit(sec1, (80, 165))
-                pygame.draw.line(screen, YELLOW, (80, 195), (WIDTH - 80, 195), 1)
+                screen.blit(sec1, (80, 165 - scroll_offset))
+                pygame.draw.line(screen, YELLOW, (80, 195 - scroll_offset), (WIDTH - 80, 195 - scroll_offset), 1)
 
                 # Left sub-column - Player 1
                 p1_title = fonts['small'].render('Player 1  (LEFT paddle)', True, GREEN)
-                screen.blit(p1_title, (80, 210))
+                screen.blit(p1_title, (80, 210 - scroll_offset))
                 p1_lines = ['W  →  Move Up', 'S  →  Move Down']
-                y_p1 = 245
+                y_p1 = 245 - scroll_offset
                 for ln in p1_lines:
                     t = fonts['tiny'].render(ln, True, WHITE)
                     screen.blit(t, (80, y_p1))
                     y_p1 += 25
 
                 # Vertical divider
-                pygame.draw.line(screen, LIGHT_GRAY, (WIDTH//2, 210), (WIDTH//2, 280), 1)
+                pygame.draw.line(screen, LIGHT_GRAY, (WIDTH//2, 210 - scroll_offset), (WIDTH//2, 280 - scroll_offset), 1)
 
                 # Right sub-column - Player 2 / AI
                 p2_title = fonts['small'].render('Player 2 / AI  (RIGHT paddle)', True, RED)
-                screen.blit(p2_title, (WIDTH//2 + 20, 210))
+                screen.blit(p2_title, (WIDTH//2 + 20, 210 - scroll_offset))
                 p2_lines = ['↑  →  Move Up', '↓  →  Move Down']
-                y_p2 = 245
+                y_p2 = 245 - scroll_offset
                 for ln in p2_lines:
                     t = fonts['tiny'].render(ln, True, WHITE)
                     screen.blit(t, (WIDTH//2 + 20, y_p2))
@@ -1213,10 +1197,10 @@ def main(args=None):
                 screen.blit(ai_note, (WIDTH//2 + 20, y_p2 + 5))
 
                 # ── SECTION 2: GAME RULES ──
-                draw_card(320, 200)
+                draw_card(screen, 320 - scroll_offset, 200)
                 sec2 = fonts['small'].render('GAME RULES', True, YELLOW)
-                screen.blit(sec2, (80, 335))
-                pygame.draw.line(screen, YELLOW, (80, 365), (WIDTH - 80, 365), 1)
+                screen.blit(sec2, (80, 335 - scroll_offset))
+                pygame.draw.line(screen, YELLOW, (80, 365 - scroll_offset), (WIDTH - 80, 365 - scroll_offset), 1)
 
                 win_score = settings.get('gameplay', {}).get('winning_score', 5)
                 rules = [
@@ -1225,20 +1209,20 @@ def main(args=None):
                     'After each point a 3-second countdown restarts the ball',
                     'Hit ball near paddle edge for sharper angle shots',
                 ]
-                y_rules = 385
+                y_rules = 385 - scroll_offset
                 for rule in rules:
                     bullet = fonts['tiny'].render(f'•  {rule}', True, WHITE)
                     screen.blit(bullet, (80, y_rules))
                     y_rules += 40
 
                 # ── SECTION 3: SHORTCUTS ──
-                draw_card(530, 110)
+                draw_card(screen, 530 - scroll_offset, 110)
                 sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
-                screen.blit(sec3, (80, 545))
-                pygame.draw.line(screen, YELLOW, (80, 575), (WIDTH - 80, 575), 1)
+                screen.blit(sec3, (80, 545 - scroll_offset))
+                pygame.draw.line(screen, YELLOW, (80, 575 - scroll_offset), (WIDTH - 80, 575 - scroll_offset), 1)
 
                 shortcuts = [('ESC', 'Return to Home screen'), ('R', 'Restart current game')]
-                y_s = 595
+                y_s = 595 - scroll_offset
                 for key, desc in shortcuts:
                     key_box = pygame.Rect(80, y_s - 5, 50, 30)
                     pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=6)
@@ -1253,7 +1237,7 @@ def main(args=None):
                 y = 150 - scroll_offset
                 def draw_step(header, lines, y_pos):
                     h = 60 + len(lines) * 25 + 10
-                    draw_card(y_pos, h)
+                    draw_card(screen, y_pos, h)
                     
                     # Draw header
                     txt = fonts['small'].render(header, True, YELLOW)
@@ -1272,9 +1256,26 @@ def main(args=None):
                 y = draw_step('STEP 3 — HOST PC', ['Open WSL2 terminal:', 'source /opt/ros/jazzy/setup.bash', 'source ~/ros2_ws/install/setup.bash', 'ros2 run pong_game pygame_pong', 'Go to Network screen → Click START AS HOST'], y)
                 y = draw_step('STEP 4 — PARTNER PC', ['Option A - Has ROS 2 + WSL2:', 'source /opt/ros/jazzy/setup.bash', 'source ~/ros2_ws/install/setup.bash', 'python3 ~/pong_controller.py <HOST_IP>', 'Option B - Python on Windows only:', 'python C:\\pong_controller.py <HOST_IP>'], y)
 
+            # 2. Draw fixed tab navigation bar ON TOP
+            pygame.draw.rect(screen, DARK_GRAY, (0, 0, WIDTH, 116)) # Background for tabs
+            tab1_col = CYAN if help_tab == 0 else LIGHT_GRAY
+            tab2_col = CYAN if help_tab == 1 else LIGHT_GRAY
+            
+            # Tab highlight
+            if help_tab == 0:
+                pygame.draw.rect(screen, (40, 40, 60), (WIDTH//2 - 210, 60, 200, 50), border_radius=10)
+            else:
+                pygame.draw.rect(screen, (40, 40, 60), (WIDTH//2 + 10, 60, 200, 50), border_radius=10)
+
+            t1 = fonts['small'].render('How to Play', True, tab1_col)
+            t2 = fonts['small'].render('Network Setup', True, tab2_col)
+            screen.blit(t1, (WIDTH//2 - 200 + (200 - t1.get_width())//2, 70))
+            screen.blit(t2, (WIDTH//2 + 20 + (200 - t2.get_width())//2, 70))
+            pygame.draw.line(screen, LIGHT_GRAY, (0, 115), (WIDTH, 115), 1)
+            
             # Draw back button last so it's on top
             help_back_btn.draw(screen, fonts['small'])
-            pygame.display.flip()            
+            pygame.display.flip()
             
 
         elif state == 'settings':
