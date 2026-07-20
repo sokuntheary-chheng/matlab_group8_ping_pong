@@ -361,7 +361,7 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict, clock=
 
     pygame.display.flip()
 
-def draw_network(screen, fonts, host_btn, join_btn, back_btn_local):
+def draw_network(screen, fonts, host_btn, join_btn, partner_btn, back_btn_local):
     """Render network screen - event handling done in main loop"""
     screen.fill(DARK_GRAY)
     pygame.draw.rect(screen, BLUE, (0, 0, WIDTH, HEIGHT), 3)
@@ -395,6 +395,7 @@ def draw_network(screen, fonts, host_btn, join_btn, back_btn_local):
     # Draw buttons
     host_btn.draw(screen, fonts['small'])
     join_btn.draw(screen, fonts['small'])
+    partner_btn.draw(screen, fonts['small'])
     back_btn_local.draw(screen, fonts['small'])
 
     # Bottom hints
@@ -943,6 +944,7 @@ def main(args=None):
     # Network buttons (created once, reused in loop)
     host_btn = Button(WIDTH//2 - 330, 280, 300, 60, '🎮  Start as HOST', (20, 100, 20), (40, 150, 40))
     join_btn = Button(WIDTH//2 + 30, 280, 300, 60, '🔗  Join as CLIENT', (20, 70, 110), (40, 110, 180))
+    partner_btn = Button(WIDTH//2 - 150, 330, 300, 60, '🎮  Start as PARTNER', (100, 60, 20), (180, 100, 40))
     back_btn_network = Button(WIDTH//2 - 150, 380, 300, 60, '←  Back to Home', (70, 20, 20), (130, 40, 40))
     
     # Network join buttons
@@ -956,7 +958,7 @@ def main(args=None):
     ]
     back_btn = Button(WIDTH - 210, HEIGHT - 70, 190, 50, 'Back to Home', (70,20,20), (130,40,40))
     help_back_btn = Button(WIDTH - 210, HEIGHT - 70, 190, 50, 'Back to Home', (70,20,20), (130,40,40))
-    start_btn = Button(WIDTH//2 - 210, HEIGHT - 150, 420, 60, '▶  Start as HOST', (20,100,20), (40,150,40))
+    start_btn = Button(WIDTH//2 - 210, HEIGHT - 150, 420, 60, 'Start as HOST', (20,100,20), (40,150,40))
     state     = 'home'
     mode      = 1
     particles = []
@@ -971,8 +973,12 @@ def main(args=None):
         dt = time.time() - prev_time
         prev_time = time.time()
         dt = max(0.001, min(dt, 0.05))
-        
+         
         events = pygame.event.get()
+         
+        # Pre-compute input_box for network_join state
+        if state == 'network_join':
+            input_box = pygame.Rect(WIDTH//2 - 200, 240, 400, 60)
 
         for event in events:
             if event.type == pygame.QUIT:
@@ -1028,6 +1034,111 @@ def main(args=None):
                         node.reset_game()
                         trail.clear()
                         particles.clear()
+
+            elif state == 'network':
+               if host_btn.is_clicked(event):
+                   try: sounds['click'].play()
+                   except: pass
+                   mode = 3
+                   node._network_mode = True
+                   node._network_role = 'HOST'
+                   node.reset_game()
+                   trail.clear()
+                   particles.clear()
+                   state = 'game'
+               if join_btn.is_clicked(event):
+                   try: sounds['click'].play()
+                   except: pass
+                   state = 'network_join'
+               if partner_btn.is_clicked(event):
+                   try: sounds['click'].play()
+                   except: pass
+                   mode = 3
+                   node._network_mode = True
+                   node._network_role = 'CLIENT'
+                   node.reset_game()
+                   trail.clear()
+                   particles.clear()
+                   state = 'network_join'
+               if back_btn_network.is_clicked(event):
+                   try: sounds['click'].play()
+                   except: pass
+                   state = 'home'
+               if event.type == pygame.KEYDOWN:
+                   if event.key == pygame.K_h:
+                       try: sounds['click'].play()
+                       except: pass
+                       mode = 3
+                       node._network_mode = True
+                       node._network_role = 'HOST'
+                       node.reset_game()
+                       trail.clear()
+                       particles.clear()
+                       state = 'game'
+                   elif event.key == pygame.K_c:
+                       try: sounds['click'].play()
+                       except: pass
+                       state = 'network_join'
+                   elif event.key == pygame.K_ESCAPE:
+                       try: sounds['click'].play()
+                       except: pass
+                       state = 'home'
+
+            elif state == 'network_join':
+               if connect_btn.is_clicked(event):
+                   if client_input_text.strip():
+                       try: sounds['click'].play()
+                       except: pass
+                       host_ip = client_input_text.strip()
+                       mode = 3
+                       node._network_mode = True
+                       node._network_role = 'CLIENT'
+                       node._network_host_ip = host_ip
+                       node.reset_game()
+                       trail.clear()
+                       particles.clear()
+                       state = 'game'
+                   else:
+                       client_error_msg = 'Please enter a valid IP address'
+               elif back_btn_join.is_clicked(event):
+                   try: sounds['click'].play()
+                   except: pass
+                   client_input_text = ''
+                   client_error_msg = ''
+                   client_connection_status = 'ready'
+                   state = 'network'
+               elif event.type == pygame.KEYDOWN:
+                   if event.key == pygame.K_RETURN:
+                       if client_input_text.strip():
+                           try: sounds['click'].play()
+                           except: pass
+                           host_ip = client_input_text.strip()
+                           mode = 3
+                           node._network_mode = True
+                           node._network_role = 'CLIENT'
+                           node._network_host_ip = host_ip
+                           node.reset_game()
+                           trail.clear()
+                           particles.clear()
+                           state = 'game'
+                       else:
+                           client_error_msg = 'Please enter a valid IP address'
+                   elif event.key == pygame.K_ESCAPE:
+                       try: sounds['click'].play()
+                       except: pass
+                       client_input_text = ''
+                       client_error_msg = ''
+                       client_connection_status = 'ready'
+                       state = 'network'
+                   elif event.key == pygame.K_BACKSPACE:
+                       client_input_text = client_input_text[:-1]
+                   elif event.unicode.isprintable():
+                       client_input_text += event.unicode
+               elif event.type == pygame.MOUSEBUTTONDOWN:
+                   if input_box.collidepoint(event.pos):
+                       client_input_active = True
+                   else:
+                       client_input_active = False
 
         # BGM switching
         if state == 'home' and current_bgm != 'home':
@@ -1222,108 +1333,13 @@ def main(args=None):
             draw_game(screen, node, fonts, mode, particles, trail, settings, clock)
 
         elif state == 'network':
-            draw_network(screen, fonts, host_btn, join_btn, back_btn_network)
-            
-            for event in events:
-                if host_btn.is_clicked(event):
-                    try: sounds['click'].play()
-                    except: pass
-                    mode = 3
-                    node._network_mode = True
-                    node._network_role = 'HOST'
-                    node.reset_game()
-                    trail.clear()
-                    particles.clear()
-                    state = 'game'
-                if join_btn.is_clicked(event):
-                    try: sounds['click'].play()
-                    except: pass
-                    state = 'network_join'
-                if back_btn_network.is_clicked(event):
-                    try: sounds['click'].play()
-                    except: pass
-                    state = 'home'
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_h:
-                        try: sounds['click'].play()
-                        except: pass
-                        mode = 3
-                        node._network_mode = True
-                        node._network_role = 'HOST'
-                        node.reset_game()
-                        trail.clear()
-                        particles.clear()
-                        state = 'game'
-                    elif event.key == pygame.K_c:
-                        try: sounds['click'].play()
-                        except: pass
-                        state = 'network_join'
-                    elif event.key == pygame.K_ESCAPE:
-                        try: sounds['click'].play()
-                        except: pass
-                        state = 'home'
+            draw_network(screen, fonts, host_btn, join_btn, partner_btn, back_btn_network)
 
         elif state == 'network_join':
             input_box = draw_network_join(
                 screen, fonts, client_input_text, client_input_active,
                 client_error_msg, client_connection_status, connect_btn, back_btn_join
             )
-
-            for event in events:
-                if connect_btn.is_clicked(event):
-                    if client_input_text.strip():
-                        try: sounds['click'].play()
-                        except: pass
-                        host_ip = client_input_text.strip()
-                        mode = 3
-                        node._network_mode = True
-                        node._network_role = 'CLIENT'
-                        node._network_host_ip = host_ip
-                        node.reset_game()
-                        trail.clear()
-                        particles.clear()
-                        state = 'game'
-                    else:
-                        client_error_msg = 'Please enter a valid IP address'
-                elif back_btn_join.is_clicked(event):
-                    try: sounds['click'].play()
-                    except: pass
-                    client_input_text = ''
-                    client_error_msg = ''
-                    client_connection_status = 'ready'
-                    state = 'network'
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_RETURN:
-                        if client_input_text.strip():
-                            try: sounds['click'].play()
-                            except: pass
-                            host_ip = client_input_text.strip()
-                            mode = 3
-                            node._network_mode = True
-                            node._network_role = 'CLIENT'
-                            node._network_host_ip = host_ip
-                            node.reset_game()
-                            trail.clear()
-                            particles.clear()
-                            state = 'game'
-                        else:
-                            client_error_msg = 'Please enter a valid IP address'
-                    elif event.key == pygame.K_ESCAPE:
-                        try: sounds['click'].play()
-                        except: pass
-                        client_input_text = ''
-                        client_error_msg = ''
-                        client_connection_status = 'ready'
-                        state = 'network'
-                    elif event.key == pygame.K_BACKSPACE:
-                        client_input_text = client_input_text[:-1]
-                    elif event.unicode.isprintable():
-                        client_input_text += event.unicode
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if input_box.collidepoint(event.pos):
-                        client_input_active = True
-                    else:
-                        client_input_active = False
 
         clock.tick(FPS)
 
