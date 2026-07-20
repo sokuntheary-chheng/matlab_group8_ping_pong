@@ -993,14 +993,15 @@ def main(args=None):
             elif state == 'help':
                 # Handle tab clicks
                 mouse_pos = pygame.mouse.get_pos()
-                tab1_rect = pygame.Rect(WIDTH//2 - 200, 85, 180, 40)
-                tab2_rect = pygame.Rect(WIDTH//2 + 20, 85, 180, 40)
+                tab1_rect = pygame.Rect(WIDTH//2 - 210, 60, 200, 50)
+                tab2_rect = pygame.Rect(WIDTH//2 + 10, 60, 200, 50)
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if tab1_rect.collidepoint(event.pos):
                         help_tab = 0
                         scroll_offset = 0 # reset scroll
                     elif tab2_rect.collidepoint(event.pos):
                         help_tab = 1
+                        scroll_offset = 0
                     elif help_back_btn.rect.collidepoint(event.pos):
                         state = 'home'
                         help_tab = 0
@@ -1261,11 +1262,18 @@ def main(args=None):
             tab1_col = CYAN if help_tab == 0 else LIGHT_GRAY
             tab2_col = CYAN if help_tab == 1 else LIGHT_GRAY
             
-            # Tab highlight
+            # Tab highlight & outline
+            tab1_rect = pygame.Rect(WIDTH//2 - 210, 60, 200, 50)
+            tab2_rect = pygame.Rect(WIDTH//2 + 10, 60, 200, 50)
+            
             if help_tab == 0:
-                pygame.draw.rect(screen, (40, 40, 60), (WIDTH//2 - 210, 60, 200, 50), border_radius=10)
+                pygame.draw.rect(screen, (40, 40, 60), tab1_rect, border_radius=10)
             else:
-                pygame.draw.rect(screen, (40, 40, 60), (WIDTH//2 + 10, 60, 200, 50), border_radius=10)
+                pygame.draw.rect(screen, (40, 40, 60), tab2_rect, border_radius=10)
+            
+            # Draw outlines
+            pygame.draw.rect(screen, CYAN, tab1_rect, 2, border_radius=10)
+            pygame.draw.rect(screen, CYAN, tab2_rect, 2, border_radius=10)
 
             t1 = fonts['small'].render('How to Play', True, tab1_col)
             t2 = fonts['small'].render('Network Setup', True, tab2_col)
