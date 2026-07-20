@@ -121,6 +121,62 @@ class PongNode(Node):
         self.countdown_max = 3.0
         self.last_scorer = 0  # 1 or 2
 
+        # Guest / partner mode (this PC joins as Player 2 over the network)
+        self.is_guest          = False
+        self.guest_state_sub   = None
+        self.guest_score_sub   = None
+        self.guest_paddle_pub  = None
+        self.guest_ball_x      = float(WIDTH // 2)
+        self.guest_ball_y      = float(HEIGHT // 2)
+        self.guest_paddle1_y   = float(HEIGHT // 2)
+        self.guest_paddle2_y   = float(HEIGHT // 2)
+        self.guest_score1      = 0
+        self.guest_score2      = 0
+        self.guest_game_status = 0  # 0 = waiting for host
+        self.guest_my_paddle_y = 0.0  # normalized -2.25..2.25, sent to host
+
+    def enable_guest_mode(self):
+        """Turn this instance into a network Guest (Player 2) instead of Host."""
+        if self.is_guest:
+            return
+        self.is_guest = True
+        self.guest_ball_x      = float(WIDTH // 2)
+        self.guest_ball_y      = float(HEIGHT // 2)
+        self.guest_paddle1_y   = float(HEIGHT // 2)
+        self.guest_paddle2_y   = float(HEIGHT // 2)
+        self.guest_score1      = 0
+        self.guest_score2      = 0
+        self.guest_game_status = 0
+        self.guest_my_paddle_y = 0.0
+        self.guest_state_sub = self.create_subscription(
+            PongGameState, '/pong/game_state', self.guest_state_callback, 10)
+        self.guest_score_sub = self.create_subscription(
+            PongScore, '/pong/score_event', self.guest_score_callback, 10)
+        self.guest_paddle_pub = self.create_publisher(
+            PongGameState, '/pong/paddle_input', 10)
+        self.create_timer(0.05, self.publish_guest_paddle)
+        self.get_logger().info('Guest mode enabled — you are Player 2 (RIGHT paddle)')
+
+    def guest_state_callback(self, msg):
+        self.guest_ball_x      = msg.ball_x
+        self.guest_ball_y      = msg.ball_y
+        self.guest_paddle1_y   = msg.paddle1_y
+        self.guest_paddle2_y   = msg.paddle2_y
+        self.guest_score1      = msg.score_player1
+        self.guest_score2      = msg.score_player2
+        self.guest_game_status = msg.game_status
+
+    def guest_score_callback(self, msg):
+        self.get_logger().info(
+            f'[Guest] Score: {msg.score_player1}-{msg.score_player2}  [{msg.event_type}]')
+
+    def publish_guest_paddle(self):
+        if not self.is_guest or self.guest_paddle_pub is None:
+            return
+        msg = PongGameState()
+        msg.paddle2_y = float(self.guest_my_paddle_y)
+        self.guest_paddle_pub.publish(msg)
+
     def reset_game(self):
         self.paddle1_y   = float(HEIGHT // 2)
         self.paddle2_y   = float(HEIGHT // 2)
@@ -381,15 +437,20 @@ def draw_network(screen, fonts, back_btn):
     note = fonts['tiny'].render('Share this IP with your partner', True, LIGHT_GRAY)
     screen.blit(note, (WIDTH//2 - note.get_width()//2, 245))
 
-    host_btn = Button(WIDTH//2 - 320, HEIGHT - 190, 620, 60,
+    host_btn = Button(WIDTH//2 - 310, HEIGHT//2 - 30, 620, 60,
                       '▶  Start as HOST  (You = Player 1 Left Paddle)',
                       (30, 120, 30), (50, 180, 50))
     host_btn.draw(screen, fonts['small'])
 
-    back_btn.rect = pygame.Rect(WIDTH//2 - 120, HEIGHT - 110, 240, 48)
+    join_btn = Button(WIDTH//2 - 310, HEIGHT//2 + 46, 620, 60,
+                      '🤝  Join as PARTNER  (You = Player 2 Right Paddle)',
+                      (30, 60, 120), (50, 90, 180))
+    join_btn.draw(screen, fonts['small'])
+
+    back_btn.rect = pygame.Rect(WIDTH - 210, HEIGHT - 70, 190, 50)
     back_btn.color = (120, 40, 40)
     back_btn.hover = (180, 60, 60)
-    back_btn.text = '←  Back to Home'
+    back_btn.text = ' Back to Home'
     back_btn.draw(screen, fonts['small'])
 
     hint1 = fonts['tiny'].render('Partner runs: python3 ~/pong_controller.py <YOUR_IP>', True, WHITE)
@@ -409,10 +470,69 @@ def draw_network(screen, fonts, back_btn):
         mx, my = pygame.mouse.get_pos()
         if host_btn.rect.collidepoint(mx, my):
             return 'start'
+        if join_btn.rect.collidepoint(mx, my):
+            return 'join'
         if back_btn.rect.collidepoint(mx, my):
             return 'back'
 
     return None
+
+def draw_guest(screen, node, fonts):
+    """Render the game while this PC is acting as network Guest (Player 2)."""
+    if node.guest_game_status == 0:
+        screen.fill(DARK_GRAY)
+        pygame.draw.rect(screen, BLUE, (0, 0, WIDTH, HEIGHT), 3)
+        title = fonts['big'].render('Waiting for Host…', True, YELLOW)
+        screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//2 - 80))
+        sub = fonts['small'].render(
+            'Make sure the Host has clicked "Start as HOST"', True, WHITE)
+        screen.blit(sub, (WIDTH//2 - sub.get_width()//2, HEIGHT//2 - 10))
+        hint = fonts['tiny'].render('W = Up   S = Down   ESC = Back to Home', True, LIGHT_GRAY)
+        screen.blit(hint, (WIDTH//2 - hint.get_width()//2, HEIGHT - 40))
+        pygame.display.flip()
+        return
+
+    screen.fill((10, 80, 40))
+    pygame.draw.rect(screen, WHITE, (20, 20, WIDTH-40, HEIGHT-40), 6, border_radius=6)
+    dash_h, gap = 20, 18
+    x = WIDTH // 2
+    y = 30
+    while y < HEIGHT - 30:
+        pygame.draw.rect(screen, WHITE, (x-2, y, 4, dash_h))
+        y += dash_h + gap
+
+    pygame.draw.rect(screen, GREEN,
+        (LEFT_MARGIN, int(node.guest_paddle1_y) - PADDLE_H//2, PADDLE_W, PADDLE_H),
+        border_radius=6)
+    pygame.draw.rect(screen, RED,
+        (WIDTH - LEFT_MARGIN - PADDLE_W, int(node.guest_paddle2_y) - PADDLE_H//2,
+         PADDLE_W, PADDLE_H), border_radius=6)
+
+    pygame.draw.circle(screen, CYAN,
+        (int(node.guest_ball_x), int(node.guest_ball_y)), BALL_SIZE)
+    pygame.draw.circle(screen, WHITE,
+        (int(node.guest_ball_x), int(node.guest_ball_y)), BALL_SIZE - 4)
+
+    s1 = fonts['big'].render(str(node.guest_score1), True, GREEN)
+    s2 = fonts['big'].render(str(node.guest_score2), True, RED)
+    screen.blit(s1, (WIDTH//2 - 80, 15))
+    screen.blit(s2, (WIDTH//2 + 45, 15))
+
+    if node.guest_game_status == 2:
+        txt = fonts['big'].render('PLAYER 1 WINS!', True, GREEN)
+        screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2 - 40))
+    elif node.guest_game_status == 3:
+        txt = fonts['big'].render('PLAYER 2 WINS!', True, RED)
+        screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2 - 40))
+
+    p2_label = fonts['tiny'].render('YOU  (Player 2)', True, RED)
+    screen.blit(p2_label, (WIDTH - LEFT_MARGIN - PADDLE_W - p2_label.get_width() - 10,
+                            int(node.guest_paddle2_y) - 20))
+
+    hint = fonts['tiny'].render('W = Up   S = Down   ESC = Back to Home', True, LIGHT_GRAY)
+    screen.blit(hint, (WIDTH//2 - hint.get_width()//2, HEIGHT - 30))
+
+    pygame.display.flip()
 
 def draw_settings(screen, fonts, settings_dict, clock):
     running = True
@@ -976,10 +1096,20 @@ def main(args=None):
                     trail.clear()
                     particles.clear()
                     state = 'game'
+                elif result == 'join':
+                    try: sounds['click'].play()
+                    except: pass
+                    node.enable_guest_mode()
+                    state = 'guest'
                 elif result == 'back':
                     try: sounds['click'].play()
                     except: pass
                     state = 'home'
+
+            elif state == 'guest':
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        state = 'home'
 
         # BGM switching
         if state == 'home' and current_bgm != 'home':
@@ -1012,81 +1142,81 @@ def main(args=None):
                 pygame.draw.line(screen, CYAN,
                     (WIDTH//2 - 200, 78), (WIDTH//2 + 200, 78), 1)
 
-            # ── SECTION 1: CONTROLS ──
-            sec1 = fonts['small'].render('CONTROLS', True, YELLOW)
-            screen.blit(sec1, (80, 95))
-            pygame.draw.line(screen, YELLOW, (80, 125), (WIDTH - 80, 125), 1)
+                # ── SECTION 1: CONTROLS ──
+                sec1 = fonts['small'].render('CONTROLS', True, YELLOW)
+                screen.blit(sec1, (80, 95))
+                pygame.draw.line(screen, YELLOW, (80, 125), (WIDTH - 80, 125), 1)
 
-            # Left sub-column - Player 1
-            p1_title = fonts['small'].render('Player 1  (LEFT paddle)', True, GREEN)
-            screen.blit(p1_title, (80, 138))
-            p1_lines = ['W  →  Move Up', 'S  →  Move Down']
-            y = 173
-            for ln in p1_lines:
-                t = fonts['tiny'].render(ln, True, WHITE)
-                screen.blit(t, (80, y))
-                y += 28
+                # Left sub-column - Player 1
+                p1_title = fonts['small'].render('Player 1  (LEFT paddle)', True, GREEN)
+                screen.blit(p1_title, (80, 138))
+                p1_lines = ['W  →  Move Up', 'S  →  Move Down']
+                y = 173
+                for ln in p1_lines:
+                    t = fonts['tiny'].render(ln, True, WHITE)
+                    screen.blit(t, (80, y))
+                    y += 28
 
-            # Vertical divider
-            pygame.draw.line(screen, LIGHT_GRAY,
-                (WIDTH//2, 138), (WIDTH//2, 245), 1)
+                # Vertical divider
+                pygame.draw.line(screen, LIGHT_GRAY,
+                    (WIDTH//2, 138), (WIDTH//2, 245), 1)
 
-            # Right sub-column - Player 2 / AI
-            p2_title = fonts['small'].render('Player 2 / AI  (RIGHT paddle)', True, RED)
-            screen.blit(p2_title, (WIDTH//2 + 20, 138))
-            p2_lines = [
-                '\u2191  \u2192  Move Up',
-                '\u2193  \u2192  Move Down',
-            ]
-            y = 173
-            for ln in p2_lines:
-                t = fonts['tiny'].render(ln, True, WHITE)
-                screen.blit(t, (WIDTH//2 + 20, y))
-                y += 28
-            ai_note = fonts['tiny'].render(
-                'Single Player: right paddle = AI', True, LIGHT_GRAY)
-            screen.blit(ai_note, (WIDTH//2 + 20, y + 8))
+                # Right sub-column - Player 2 / AI
+                p2_title = fonts['small'].render('Player 2 / AI  (RIGHT paddle)', True, RED)
+                screen.blit(p2_title, (WIDTH//2 + 20, 138))
+                p2_lines = [
+                    '\u2191  \u2192  Move Up',
+                    '\u2193  \u2192  Move Down',
+                ]
+                y = 173
+                for ln in p2_lines:
+                    t = fonts['tiny'].render(ln, True, WHITE)
+                    screen.blit(t, (WIDTH//2 + 20, y))
+                    y += 28
+                ai_note = fonts['tiny'].render(
+                    'Single Player: right paddle = AI', True, LIGHT_GRAY)
+                screen.blit(ai_note, (WIDTH//2 + 20, y + 8))
 
-            # ── SECTION 2: GAME RULES ──
-            pygame.draw.line(screen, LIGHT_GRAY, (80, 265), (WIDTH - 80, 265), 1)
-            sec2 = fonts['small'].render('GAME RULES', True, YELLOW)
-            screen.blit(sec2, (80, 278))
-            pygame.draw.line(screen, YELLOW, (80, 308), (WIDTH - 80, 308), 1)
+                # ── SECTION 2: GAME RULES ──
+                pygame.draw.line(screen, LIGHT_GRAY, (80, 265), (WIDTH - 80, 265), 1)
+                sec2 = fonts['small'].render('GAME RULES', True, YELLOW)
+                screen.blit(sec2, (80, 278))
+                pygame.draw.line(screen, YELLOW, (80, 308), (WIDTH - 80, 308), 1)
 
-            win_score = settings.get('gameplay', {}).get('winning_score', 5)
-            rules = [
-                f'First player to reach  {win_score}  points wins  (changeable in Settings)',
-                'Ball speed increases by a % after each paddle hit',
-                'After each point a 3-second countdown restarts the ball',
-                'Hit ball near paddle edge for sharper angle shots',
-            ]
-            y = 320
-            for rule in rules:
-                bullet = fonts['tiny'].render(f'\u2022  {rule}', True, WHITE)
-                screen.blit(bullet, (80, y))
-                y += 32
+                win_score = settings.get('gameplay', {}).get('winning_score', 5)
+                rules = [
+                    f'First player to reach  {win_score}  points wins  (changeable in Settings)',
+                    'Ball speed increases by a % after each paddle hit',
+                    'After each point a 3-second countdown restarts the ball',
+                    'Hit ball near paddle edge for sharper angle shots',
+                ]
+                y = 320
+                for rule in rules:
+                    bullet = fonts['tiny'].render(f'\u2022  {rule}', True, WHITE)
+                    screen.blit(bullet, (80, y))
+                    y += 32
 
-            # ── SECTION 3: SHORTCUTS ──
-            pygame.draw.line(screen, LIGHT_GRAY, (80, 460), (WIDTH - 80, 460), 1)
-            sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
-            screen.blit(sec3, (80, 472))
-            pygame.draw.line(screen, YELLOW, (80, 502), (WIDTH - 80, 502), 1)
+                # ── SECTION 3: SHORTCUTS ──
+                pygame.draw.line(screen, LIGHT_GRAY, (80, 460), (WIDTH - 80, 460), 1)
+                sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
+                screen.blit(sec3, (80, 472))
+                pygame.draw.line(screen, YELLOW, (80, 502), (WIDTH - 80, 502), 1)
 
-            shortcuts = [
-                ('ESC', 'Return to Home screen'),
-                ('R',   'Restart current game'),
-            ]
-            y = 515
-            for key, desc in shortcuts:
-                key_box = pygame.Rect(80, y - 2, 44, 26)
-                pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=4)
-                pygame.draw.rect(screen, CYAN, key_box, 1, border_radius=4)
-                kt = fonts['tiny'].render(key, True, WHITE)
-                screen.blit(kt, (80 + 22 - kt.get_width()//2,
-                                 y + 13 - kt.get_height()//2))
-                dt = fonts['tiny'].render(desc, True, LIGHT_GRAY)
-                screen.blit(dt, (134, y))
-                y += 32
+                shortcuts = [
+                    ('ESC', 'Return to Home screen'),
+                    ('R',   'Restart current game'),
+                ]
+                y = 515
+                for key, desc in shortcuts:
+                    key_box = pygame.Rect(80, y - 2, 44, 26)
+                    pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=4)
+                    pygame.draw.rect(screen, CYAN, key_box, 1, border_radius=4)
+                    kt = fonts['tiny'].render(key, True, WHITE)
+                    screen.blit(kt, (80 + 22 - kt.get_width()//2,
+                                     y + 13 - kt.get_height()//2))
+                    dt = fonts['tiny'].render(desc, True, LIGHT_GRAY)
+                    screen.blit(dt, (134, y))
+                    y += 32
             else:
                 pygame.draw.line(screen, CYAN,
                     (WIDTH//2 - 220, 78), (WIDTH//2 + 220, 78), 1)
@@ -1222,6 +1352,15 @@ def main(args=None):
             draw_settings(screen, fonts, settings, clock)
             settings_mod.save_settings(settings)
             state = 'home'
+
+        elif state == 'guest':
+            keys = pygame.key.get_pressed()
+            paddle_speed = 3.0 * dt
+            if keys[pygame.K_w]:
+                node.guest_my_paddle_y = min(node.guest_my_paddle_y + paddle_speed, 2.25)
+            if keys[pygame.K_s]:
+                node.guest_my_paddle_y = max(node.guest_my_paddle_y - paddle_speed, -2.25)
+            draw_guest(screen, node, fonts)
 
         elif state == 'game':
             keys = pygame.key.get_pressed()
