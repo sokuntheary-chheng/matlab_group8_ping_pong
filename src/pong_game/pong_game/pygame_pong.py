@@ -100,6 +100,8 @@ class PongNode(Node):
         # calls publish_state() every 0.05 seconds = 20 times per second (20Hz)
         self.get_logger().info('ROS2 Pong Node started!')
         self._network_mode = False  # set True when in Across 2 PCs mode
+        self._network_role = 'HOST'  # 'HOST' or 'CLIENT'
+        self._network_host_ip = None  # IP address if CLIENT mode
 
         self.settings = settings_dict or {}
 
@@ -319,6 +321,13 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict, clock=
         f'Speed: {node.speed_mult:.1f}x', True, YELLOW)
     screen.blit(spd, (WIDTH//2 - spd.get_width()//2, 75))
 
+    # Show network role if in network mode
+    if mode == 3 and hasattr(node, '_network_role'):
+        role_text = f'Network: {node._network_role} (Player {1 if node._network_role == "HOST" else 2})'
+        role_color = GREEN if node._network_role == 'HOST' else BLUE
+        role_surf = fonts['tiny'].render(role_text, True, role_color)
+        screen.blit(role_surf, (WIDTH - role_surf.get_width() - 10, 10))
+
     esc = fonts['tiny'].render('ESC=Home  R=Restart', True, LIGHT_GRAY)
     screen.blit(esc, (WIDTH//2 - esc.get_width()//2, HEIGHT-30))
     if settings_dict.get('display', {}).get('show_fps', False):
@@ -352,7 +361,8 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict, clock=
 
     pygame.display.flip()
 
-def draw_network(screen, fonts, back_btn):
+def draw_network(screen, fonts, host_btn, join_btn, back_btn_local):
+    """Render network screen - event handling done in main loop"""
     screen.fill(DARK_GRAY)
     pygame.draw.rect(screen, BLUE, (0, 0, WIDTH, HEIGHT), 3)
 
@@ -382,29 +392,79 @@ def draw_network(screen, fonts, back_btn):
     share_label = fonts['tiny'].render('Share this IP with your partner', True, LIGHT_GRAY)
     screen.blit(share_label, (WIDTH//2 - share_label.get_width()//2, 210))
 
-    # Buttons
-    start_btn = Button(WIDTH//2 - 320, 280, 640, 60, '▶  Start as HOST  (You = Player 1 Left Paddle)', (20, 100, 20), (40, 150, 40))
-    back_btn_local = Button(WIDTH//2 - 150, 370, 300, 60, '←  Back to Home', (70, 20, 20), (130, 40, 40))
-    
-    start_btn.draw(screen, fonts['small'])
+    # Draw buttons
+    host_btn.draw(screen, fonts['small'])
+    join_btn.draw(screen, fonts['small'])
     back_btn_local.draw(screen, fonts['small'])
 
-    # Bottom hint
-    hint1 = fonts['tiny'].render('Partner runs: python3 ~/pong_controller.py <YOUR_IP>', True, YELLOW)
-    hint2 = fonts['tiny'].render('Press SPACE or click Start as HOST to begin', True, WHITE)
+    # Bottom hints
+    hint1 = fonts['tiny'].render('HOST = Player 1 (Left Paddle)  |  CLIENT = Player 2 (Right Paddle)', True, WHITE)
+    hint2 = fonts['tiny'].render('Press [H] for HOST or [C] to JOIN', True, LIGHT_GRAY)
     screen.blit(hint1, (WIDTH//2 - hint1.get_width()//2, HEIGHT - 110))
     screen.blit(hint2, (WIDTH//2 - hint2.get_width()//2, HEIGHT - 80))
 
     pygame.display.flip()
 
-    # Input handling
-    for event in pygame.event.get():
-        if start_btn.is_clicked(event): return 'start'
-        if back_btn_local.is_clicked(event): return 'back'
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE: return 'start'
-            if event.key == pygame.K_ESCAPE: return 'back'
-    return None
+def draw_network_join(screen, fonts, input_text, input_active, error_msg, connection_status, connect_btn, back_btn):
+    """Screen for CLIENT to enter HOST IP and connect - rendering only"""
+    screen.fill(DARK_GRAY)
+    pygame.draw.rect(screen, BLUE, (0, 0, WIDTH, HEIGHT), 3)
+
+    # Title
+    title = fonts['medium'].render('Join as CLIENT', True, CYAN)
+    screen.blit(title, (WIDTH//2 - title.get_width()//2, 40))
+
+    # Status indicator
+    if connection_status == 'connecting':
+        status_text = fonts['small'].render('Connecting...', True, YELLOW)
+    elif connection_status == 'connected':
+        status_text = fonts['small'].render('✓ Connected!', True, GREEN)
+    elif connection_status == 'failed':
+        status_text = fonts['small'].render('✗ Connection Failed', True, RED)
+    else:
+        status_text = fonts['small'].render('Ready to Connect', True, LIGHT_GRAY)
+    screen.blit(status_text, (WIDTH//2 - status_text.get_width()//2, 110))
+
+    # Instructions
+    instr = fonts['small'].render('Enter HOST IP Address:', True, WHITE)
+    screen.blit(instr, (WIDTH//2 - instr.get_width()//2, 180))
+
+    # Input box
+    input_box = pygame.Rect(WIDTH//2 - 200, 240, 400, 60)
+    box_color = CYAN if input_active else LIGHT_GRAY
+    pygame.draw.rect(screen, DARK_GRAY, input_box, border_radius=8)
+    pygame.draw.rect(screen, box_color, input_box, 3, border_radius=8)
+    
+    # Display input text or placeholder
+    if input_text:
+        txt = fonts['medium'].render(input_text, True, WHITE)
+    else:
+        txt = fonts['medium'].render('192.168.x.x', True, LIGHT_GRAY)
+    screen.blit(txt, (input_box.centerx - txt.get_width()//2, input_box.centery - txt.get_height()//2))
+
+    # Cursor
+    if input_active:
+        cursor_x = input_box.x + 10 + fonts['medium'].size(input_text)[0]
+        pygame.draw.line(screen, CYAN, (cursor_x, input_box.y + 8), (cursor_x, input_box.y + 52), 2)
+
+    # Error message
+    if error_msg:
+        err_txt = fonts['tiny'].render(f'Error: {error_msg}', True, RED)
+        screen.blit(err_txt, (WIDTH//2 - err_txt.get_width()//2, 320))
+
+    # Draw buttons
+    connect_btn.draw(screen, fonts['small'])
+    back_btn.draw(screen, fonts['small'])
+
+    # Help text
+    help1 = fonts['tiny'].render('Ask your HOST PC for their IP address from the HOST screen', True, LIGHT_GRAY)
+    help2 = fonts['tiny'].render('Press ENTER to connect or ESC to go back', True, LIGHT_GRAY)
+    screen.blit(help1, (WIDTH//2 - help1.get_width()//2, HEIGHT - 110))
+    screen.blit(help2, (WIDTH//2 - help2.get_width()//2, HEIGHT - 80))
+
+    pygame.display.flip()
+
+    return input_box
 
 def draw_settings(screen, fonts, settings_dict, clock):
     running = True
@@ -871,8 +931,23 @@ def main(args=None):
         'tiny':   pygame.font.Font(None, 26),
     }
 
+    # Initialize client connection variables
+    client_input_text = ''
+    client_input_active = True
+    client_error_msg = ''
+    client_connection_status = 'ready'
+
     help_btn     = Button(WIDTH - 220, 20, 90, 44, 'Help', (30, 30, 40), (60, 60, 80))
     settings_btn = Button(WIDTH - 120, 20, 100, 44, 'Settings', (30, 30, 40), (60, 60, 80))
+
+    # Network buttons (created once, reused in loop)
+    host_btn = Button(WIDTH//2 - 330, 280, 300, 60, '🎮  Start as HOST', (20, 100, 20), (40, 150, 40))
+    join_btn = Button(WIDTH//2 + 30, 280, 300, 60, '🔗  Join as CLIENT', (20, 70, 110), (40, 110, 180))
+    back_btn_network = Button(WIDTH//2 - 150, 380, 300, 60, '←  Back to Home', (70, 20, 20), (130, 40, 40))
+    
+    # Network join buttons
+    connect_btn = Button(WIDTH//2 - 330, 380, 300, 60, '✓  Connect', (20, 100, 20), (40, 150, 40))
+    back_btn_join = Button(WIDTH//2 + 30, 380, 300, 60, '✗  Back', (70, 20, 20), (130, 40, 40))
 
     home_buttons = [
         Button(WIDTH//2-220, 210, 440, 68, 'Single Player',  (20,70,20),  (40,130,40)),
@@ -1147,20 +1222,108 @@ def main(args=None):
             draw_game(screen, node, fonts, mode, particles, trail, settings, clock)
 
         elif state == 'network':
-            result = draw_network(screen, fonts, back_btn)
-            if result == 'start':
-                try: sounds['click'].play()
-                except: pass
-                mode = 3
-                node._network_mode = True
-                node.reset_game()
-                trail.clear()
-                particles.clear()
-                state = 'game'
-            elif result == 'back':
-                try: sounds['click'].play()
-                except: pass
-                state = 'home'
+            draw_network(screen, fonts, host_btn, join_btn, back_btn_network)
+            
+            for event in events:
+                if host_btn.is_clicked(event):
+                    try: sounds['click'].play()
+                    except: pass
+                    mode = 3
+                    node._network_mode = True
+                    node._network_role = 'HOST'
+                    node.reset_game()
+                    trail.clear()
+                    particles.clear()
+                    state = 'game'
+                if join_btn.is_clicked(event):
+                    try: sounds['click'].play()
+                    except: pass
+                    state = 'network_join'
+                if back_btn_network.is_clicked(event):
+                    try: sounds['click'].play()
+                    except: pass
+                    state = 'home'
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_h:
+                        try: sounds['click'].play()
+                        except: pass
+                        mode = 3
+                        node._network_mode = True
+                        node._network_role = 'HOST'
+                        node.reset_game()
+                        trail.clear()
+                        particles.clear()
+                        state = 'game'
+                    elif event.key == pygame.K_c:
+                        try: sounds['click'].play()
+                        except: pass
+                        state = 'network_join'
+                    elif event.key == pygame.K_ESCAPE:
+                        try: sounds['click'].play()
+                        except: pass
+                        state = 'home'
+
+        elif state == 'network_join':
+            input_box = draw_network_join(
+                screen, fonts, client_input_text, client_input_active,
+                client_error_msg, client_connection_status, connect_btn, back_btn_join
+            )
+
+            for event in events:
+                if connect_btn.is_clicked(event):
+                    if client_input_text.strip():
+                        try: sounds['click'].play()
+                        except: pass
+                        host_ip = client_input_text.strip()
+                        mode = 3
+                        node._network_mode = True
+                        node._network_role = 'CLIENT'
+                        node._network_host_ip = host_ip
+                        node.reset_game()
+                        trail.clear()
+                        particles.clear()
+                        state = 'game'
+                    else:
+                        client_error_msg = 'Please enter a valid IP address'
+                elif back_btn_join.is_clicked(event):
+                    try: sounds['click'].play()
+                    except: pass
+                    client_input_text = ''
+                    client_error_msg = ''
+                    client_connection_status = 'ready'
+                    state = 'network'
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        if client_input_text.strip():
+                            try: sounds['click'].play()
+                            except: pass
+                            host_ip = client_input_text.strip()
+                            mode = 3
+                            node._network_mode = True
+                            node._network_role = 'CLIENT'
+                            node._network_host_ip = host_ip
+                            node.reset_game()
+                            trail.clear()
+                            particles.clear()
+                            state = 'game'
+                        else:
+                            client_error_msg = 'Please enter a valid IP address'
+                    elif event.key == pygame.K_ESCAPE:
+                        try: sounds['click'].play()
+                        except: pass
+                        client_input_text = ''
+                        client_error_msg = ''
+                        client_connection_status = 'ready'
+                        state = 'network'
+                    elif event.key == pygame.K_BACKSPACE:
+                        client_input_text = client_input_text[:-1]
+                    elif event.unicode.isprintable():
+                        client_input_text += event.unicode
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if input_box.collidepoint(event.pos):
+                        client_input_active = True
+                    else:
+                        client_input_active = False
 
         clock.tick(FPS)
 
