@@ -7,6 +7,7 @@ import threading
 import random
 import numpy as np
 import time
+import socket
 from pong_game.sound_gen import load_sounds, start_bgm, start_home_bgm, stop_bgm, _SOUND_CACHE
 from pong_game import settings as settings_mod
 
@@ -360,90 +361,50 @@ def draw_network(screen, fonts, back_btn):
     screen.blit(title, (WIDTH//2 - title.get_width()//2, 18))
 
     # Subtitle
-    sub = fonts['tiny'].render(
-        'Both PCs must be on the same WiFi  |  Same ROS_DOMAIN_ID (default: 0)',
-        True, YELLOW)
+    sub = fonts['tiny'].render('Both PCs must be on the same WiFi or hotspot', True, YELLOW)
     screen.blit(sub, (WIDTH//2 - sub.get_width()//2, 62))
 
-    # Divider below subtitle
-    pygame.draw.line(screen, LIGHT_GRAY, (40, 88), (WIDTH - 40, 88), 1)
+    # IP Address
+    try:
+        host_ip = socket.gethostbyname(socket.gethostname())
+    except:
+        host_ip = "Run ipconfig in PowerShell"
 
-    # Vertical divider between columns
-    mid_x = WIDTH // 2
-    pygame.draw.line(screen, LIGHT_GRAY, (mid_x, 100), (mid_x, HEIGHT - 110), 1)
+    ip_label = fonts['small'].render('Your IP Address:', True, WHITE)
+    screen.blit(ip_label, (WIDTH//2 - ip_label.get_width()//2, 120))
 
-    # ── LEFT COLUMN — This PC (Host / Player 1) ──
-    col_l = 60
-    y = 105
-    host_title = fonts['small'].render('THIS PC  —  Host / Player 1', True, GREEN)
-    screen.blit(host_title, (col_l, y))
-    pygame.draw.line(screen, GREEN, (col_l, y + 38), (mid_x - 20, y + 38), 1)
-    y += 50
+    ip_box = pygame.Rect(WIDTH//2 - 150, 150, 300, 50)
+    pygame.draw.rect(screen, DARK_GRAY, ip_box, border_radius=6)
+    pygame.draw.rect(screen, CYAN, ip_box, 2, border_radius=6)
+    ip_text = fonts['small'].render(host_ip, True, CYAN)
+    screen.blit(ip_text, (ip_box.centerx - ip_text.get_width()//2, ip_box.centery - ip_text.get_height()//2))
 
-    host_steps = [
-        ('1.', 'Make sure ROS 2 is sourced:',                        WHITE),
-        ('',   'source /opt/ros/jazzy/setup.bash',                   YELLOW),
-        ('2.', 'Source your workspace:',                              WHITE),
-        ('',   'source ~/ros2_ws/install/setup.bash',                YELLOW),
-        ('3.', 'Launch the game:',                                    WHITE),
-        ('',   'ros2 launch pong_game pong.launch.py',               YELLOW),
-        ('4.', 'On this screen press  SPACE  to begin',              CYAN),
-        ('5.', 'Your paddle is on the LEFT side',                     GREEN),
-        ('',   'Controls:  W = Up   S = Down',                       GREEN),
-    ]
-    for num, text, color in host_steps:
-        if num:
-            num_surf = fonts['tiny'].render(num, True, LIGHT_GRAY)
-            screen.blit(num_surf, (col_l, y))
-        txt_surf = fonts['tiny'].render(text, True, color)
-        screen.blit(txt_surf, (col_l + 22, y))
-        y += 32
+    share_label = fonts['tiny'].render('Share this IP with your partner', True, LIGHT_GRAY)
+    screen.blit(share_label, (WIDTH//2 - share_label.get_width()//2, 210))
 
-    # ── RIGHT COLUMN — Other PC (Guest / Player 2) ──
-    col_r = mid_x + 30
-    y = 105
-    guest_title = fonts['small'].render('OTHER PC  —  Guest / Player 2', True, CYAN)
-    screen.blit(guest_title, (col_r, y))
-    pygame.draw.line(screen, CYAN, (col_r, y + 38), (WIDTH - 40, y + 38), 1)
-    y += 50
+    # Buttons
+    start_btn = Button(WIDTH//2 - 320, 280, 640, 60, '▶  Start as HOST  (You = Player 1 Left Paddle)', (20, 100, 20), (40, 150, 40))
+    back_btn_local = Button(WIDTH//2 - 150, 370, 300, 60, '←  Back to Home', (70, 20, 20), (130, 40, 40))
+    
+    start_btn.draw(screen, fonts['small'])
+    back_btn_local.draw(screen, fonts['small'])
 
-    guest_steps = [
-        ('1.', 'Connect to the SAME WiFi as Host PC',                WHITE),
-        ('2.', 'Open a terminal and source ROS 2:',                  WHITE),
-        ('',   'source /opt/ros/jazzy/setup.bash',                   YELLOW),
-        ('3.', 'Source the workspace:',                              WHITE),
-        ('',   'source ~/ros2_ws/install/setup.bash',                YELLOW),
-        ('4.', 'Run the keyboard controller:',                       WHITE),
-        ('',   'ros2 run pong_game keyboard_controller',             YELLOW),
-        ('5.', 'Your paddle is on the RIGHT side',                   RED),
-        ('',   'Controls:  W = Up   S = Down',                       RED),
-    ]
-    for num, text, color in guest_steps:
-        if num:
-            num_surf = fonts['tiny'].render(num, True, LIGHT_GRAY)
-            screen.blit(num_surf, (col_r, y))
-        txt_surf = fonts['tiny'].render(text, True, color)
-        screen.blit(txt_surf, (col_r + 22, y))
-        y += 32
+    # Bottom hint
+    hint1 = fonts['tiny'].render('Partner runs: python3 ~/pong_controller.py <YOUR_IP>', True, YELLOW)
+    hint2 = fonts['tiny'].render('Press SPACE or click Start as HOST to begin', True, WHITE)
+    screen.blit(hint1, (WIDTH//2 - hint1.get_width()//2, HEIGHT - 110))
+    screen.blit(hint2, (WIDTH//2 - hint2.get_width()//2, HEIGHT - 80))
 
-    # Bottom tip
-    pygame.draw.line(screen, LIGHT_GRAY, (40, HEIGHT - 105), (WIDTH - 40, HEIGHT - 105), 1)
-    tip1 = fonts['tiny'].render(
-        'Tip: If Guest paddle does not respond, check ROS_DOMAIN_ID matches on both PCs',
-        True, LIGHT_GRAY)
-    tip2 = fonts['tiny'].render(
-        'export ROS_DOMAIN_ID=0   (run this in terminal before sourcing on both PCs)',
-        True, LIGHT_GRAY)
-    screen.blit(tip1, (WIDTH//2 - tip1.get_width()//2, HEIGHT - 98))
-    screen.blit(tip2, (WIDTH//2 - tip2.get_width()//2, HEIGHT - 72))
-
-    # SPACE to start hint
-    hint = fonts['small'].render('Press  SPACE  to start as Host', True, WHITE)
-    screen.blit(hint, (WIDTH//2 - hint.get_width()//2 - 100, HEIGHT - 45))
-
-    # Back button
-    back_btn.draw(screen, fonts['small'])
     pygame.display.flip()
+
+    # Input handling
+    for event in pygame.event.get():
+        if start_btn.is_clicked(event): return 'start'
+        if back_btn_local.is_clicked(event): return 'back'
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE: return 'start'
+            if event.key == pygame.K_ESCAPE: return 'back'
+    return None
 
 def draw_settings(screen, fonts, settings_dict, clock):
     running = True
@@ -920,11 +881,13 @@ def main(args=None):
     ]
     back_btn = Button(WIDTH - 210, HEIGHT - 70, 190, 50, 'Back to Home', (70,20,20), (130,40,40))
     help_back_btn = Button(WIDTH - 210, HEIGHT - 70, 190, 50, 'Back to Home', (70,20,20), (130,40,40))
+    start_btn = Button(WIDTH//2 - 210, HEIGHT - 150, 420, 60, '▶  Start as HOST', (20,100,20), (40,150,40))
     state     = 'home'
     mode      = 1
     particles = []
     trail     = []
     current_bgm = 'home'
+    help_tab  = 0
 
     running = True
     prev_time = time.time()
@@ -933,17 +896,29 @@ def main(args=None):
         dt = time.time() - prev_time
         prev_time = time.time()
         dt = max(0.001, min(dt, 0.05))
+        
+        events = pygame.event.get()
 
-        for event in pygame.event.get():
+        for event in events:
             if event.type == pygame.QUIT:
                 running = False
 
-            if state == 'help':
+            elif state == 'help':
+                # Handle tab clicks
+                mouse_pos = pygame.mouse.get_pos()
+                tab1_rect = pygame.Rect(WIDTH//2 - 200, 85, 180, 40)
+                tab2_rect = pygame.Rect(WIDTH//2 + 20, 85, 180, 40)
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    if help_back_btn.rect.collidepoint(event.pos):
+                    if tab1_rect.collidepoint(event.pos):
+                        help_tab = 0
+                    elif tab2_rect.collidepoint(event.pos):
+                        help_tab = 1
+                    elif help_back_btn.rect.collidepoint(event.pos):
                         state = 'home'
-                if event.type == pygame.KEYDOWN:
+                        help_tab = 0
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     state = 'home'
+                    help_tab = 0
 
             elif state == 'home':
                 for i, btn in enumerate(home_buttons):
@@ -979,22 +954,6 @@ def main(args=None):
                         trail.clear()
                         particles.clear()
 
-            elif state == 'network':
-                if back_btn.is_clicked(event):
-                    try: sounds['click'].play()
-                    except Exception: pass
-                    state = 'home'
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        state = 'home'
-                    if event.key == pygame.K_SPACE:
-                        mode = 3
-                        node._network_mode = True
-                        node.reset_game()
-                        trail.clear()
-                        particles.clear()
-                        state = 'game'
-
         # BGM switching
         if state == 'home' and current_bgm != 'home':
             stop_bgm()
@@ -1010,92 +969,172 @@ def main(args=None):
 
         elif state == 'help':
             screen.fill(DARK_GRAY)
+            # Render tabs
+            tab1_col = CYAN if help_tab == 0 else LIGHT_GRAY
+            tab2_col = CYAN if help_tab == 1 else LIGHT_GRAY
+            t1 = fonts['small'].render('How to Play', True, tab1_col)
+            t2 = fonts['small'].render('Network Setup', True, tab2_col)
+            screen.blit(t1, (WIDTH//2 - 200, 95))
+            screen.blit(t2, (WIDTH//2 + 20, 95))
+            if help_tab == 0:
+                pygame.draw.line(screen, CYAN, (WIDTH//2 - 200, 130), (WIDTH//2 - 200 + t1.get_width(), 130), 2)
+            else:
+                pygame.draw.line(screen, CYAN, (WIDTH//2 + 20, 130), (WIDTH//2 + 20 + t2.get_width(), 130), 2)
+            pygame.draw.line(screen, LIGHT_GRAY, (0, 135), (WIDTH, 135), 1)
 
-            # Title
-            title = fonts['big'].render('HOW TO PLAY', True, CYAN)
-            screen.blit(title, (WIDTH//2 - title.get_width()//2, 25))
-            pygame.draw.line(screen, CYAN,
-                (WIDTH//2 - 200, 78), (WIDTH//2 + 200, 78), 1)
+            if help_tab == 0:
+                # Title
+                title = fonts['big'].render('HOW TO PLAY', True, CYAN)
+                screen.blit(title, (WIDTH//2 - title.get_width()//2, 150))
+                pygame.draw.line(screen, CYAN,
+                    (WIDTH//2 - 200, 203), (WIDTH//2 + 200, 203), 1)
 
-            # ── SECTION 1: CONTROLS ──
-            sec1 = fonts['small'].render('CONTROLS', True, YELLOW)
-            screen.blit(sec1, (80, 95))
-            pygame.draw.line(screen, YELLOW, (80, 125), (WIDTH - 80, 125), 1)
+                # ── SECTION 1: CONTROLS ──
+                sec1 = fonts['small'].render('CONTROLS', True, YELLOW)
+                screen.blit(sec1, (80, 220))
+                pygame.draw.line(screen, YELLOW, (80, 250), (WIDTH - 80, 250), 1)
 
-            # Left sub-column - Player 1
-            p1_title = fonts['small'].render('Player 1  (LEFT paddle)', True, GREEN)
-            screen.blit(p1_title, (80, 138))
-            p1_lines = ['W  →  Move Up', 'S  →  Move Down']
-            y = 173
-            for ln in p1_lines:
-                t = fonts['tiny'].render(ln, True, WHITE)
-                screen.blit(t, (80, y))
-                y += 28
+                # Left sub-column - Player 1
+                p1_title = fonts['small'].render('Player 1  (LEFT paddle)', True, GREEN)
+                screen.blit(p1_title, (80, 263))
+                p1_lines = ['W  →  Move Up', 'S  →  Move Down']
+                y = 298
+                for ln in p1_lines:
+                    t = fonts['tiny'].render(ln, True, WHITE)
+                    screen.blit(t, (80, y))
+                    y += 28
 
-            # Vertical divider
-            pygame.draw.line(screen, LIGHT_GRAY,
-                (WIDTH//2, 138), (WIDTH//2, 245), 1)
+                # Vertical divider
+                pygame.draw.line(screen, LIGHT_GRAY,
+                    (WIDTH//2, 263), (WIDTH//2, 370), 1)
 
-            # Right sub-column - Player 2 / AI
-            p2_title = fonts['small'].render('Player 2 / AI  (RIGHT paddle)', True, RED)
-            screen.blit(p2_title, (WIDTH//2 + 20, 138))
-            p2_lines = [
-                '\u2191  \u2192  Move Up',
-                '\u2193  \u2192  Move Down',
-            ]
-            y = 173
-            for ln in p2_lines:
-                t = fonts['tiny'].render(ln, True, WHITE)
-                screen.blit(t, (WIDTH//2 + 20, y))
-                y += 28
-            ai_note = fonts['tiny'].render(
-                'Single Player: right paddle = AI', True, LIGHT_GRAY)
-            screen.blit(ai_note, (WIDTH//2 + 20, y + 8))
+                # Right sub-column - Player 2 / AI
+                p2_title = fonts['small'].render('Player 2 / AI  (RIGHT paddle)', True, RED)
+                screen.blit(p2_title, (WIDTH//2 + 20, 263))
+                p2_lines = [
+                    '\u2191  \u2192  Move Up',
+                    '\u2193  \u2192  Move Down',
+                ]
+                y = 298
+                for ln in p2_lines:
+                    t = fonts['tiny'].render(ln, True, WHITE)
+                    screen.blit(t, (WIDTH//2 + 20, y))
+                    y += 28
+                ai_note = fonts['tiny'].render(
+                    'Single Player: right paddle = AI', True, LIGHT_GRAY)
+                screen.blit(ai_note, (WIDTH//2 + 20, y + 8))
 
-            # ── SECTION 2: GAME RULES ──
-            pygame.draw.line(screen, LIGHT_GRAY, (80, 265), (WIDTH - 80, 265), 1)
-            sec2 = fonts['small'].render('GAME RULES', True, YELLOW)
-            screen.blit(sec2, (80, 278))
-            pygame.draw.line(screen, YELLOW, (80, 308), (WIDTH - 80, 308), 1)
+                # ── SECTION 2: GAME RULES ──
+                pygame.draw.line(screen, LIGHT_GRAY, (80, 390), (WIDTH - 80, 390), 1)
+                sec2 = fonts['small'].render('GAME RULES', True, YELLOW)
+                screen.blit(sec2, (80, 403))
+                pygame.draw.line(screen, YELLOW, (80, 433), (WIDTH - 80, 433), 1)
 
-            win_score = settings.get('gameplay', {}).get('winning_score', 5)
-            rules = [
-                f'First player to reach  {win_score}  points wins  (changeable in Settings)',
-                'Ball speed increases by a % after each paddle hit',
-                'After each point a 3-second countdown restarts the ball',
-                'Hit ball near paddle edge for sharper angle shots',
-            ]
-            y = 320
-            for rule in rules:
-                bullet = fonts['tiny'].render(f'\u2022  {rule}', True, WHITE)
-                screen.blit(bullet, (80, y))
-                y += 32
+                win_score = settings.get('gameplay', {}).get('winning_score', 5)
+                rules = [
+                    f'First player to reach  {win_score}  points wins  (changeable in Settings)',
+                    'Ball speed increases by a % after each paddle hit',
+                    'After each point a 3-second countdown restarts the ball',
+                    'Hit ball near paddle edge for sharper angle shots',
+                ]
+                y = 445
+                for rule in rules:
+                    bullet = fonts['tiny'].render(f'\u2022  {rule}', True, WHITE)
+                    screen.blit(bullet, (80, y))
+                    y += 32
 
-            # ── SECTION 3: SHORTCUTS ──
-            pygame.draw.line(screen, LIGHT_GRAY, (80, 460), (WIDTH - 80, 460), 1)
-            sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
-            screen.blit(sec3, (80, 472))
-            pygame.draw.line(screen, YELLOW, (80, 502), (WIDTH - 80, 502), 1)
+                # ── SECTION 3: SHORTCUTS ──
+                pygame.draw.line(screen, LIGHT_GRAY, (80, 585), (WIDTH - 80, 585), 1)
+                sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
+                screen.blit(sec3, (80, 597))
+                pygame.draw.line(screen, YELLOW, (80, 627), (WIDTH - 80, 627), 1)
 
-            shortcuts = [
-                ('ESC', 'Return to Home screen'),
-                ('R',   'Restart current game'),
-            ]
-            y = 515
-            for key, desc in shortcuts:
-                key_box = pygame.Rect(80, y - 2, 44, 26)
-                pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=4)
-                pygame.draw.rect(screen, CYAN, key_box, 1, border_radius=4)
-                kt = fonts['tiny'].render(key, True, WHITE)
-                screen.blit(kt, (80 + 22 - kt.get_width()//2,
-                                 y + 13 - kt.get_height()//2))
-                dt = fonts['tiny'].render(desc, True, LIGHT_GRAY)
-                screen.blit(dt, (134, y))
-                y += 32
-            
+                shortcuts = [
+                    ('ESC', 'Return to Home screen'),
+                    ('R',   'Restart current game'),
+                ]
+                y = 640
+                for key, desc in shortcuts:
+                    key_box = pygame.Rect(80, y - 2, 44, 26)
+                    pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=4)
+                    pygame.draw.rect(screen, CYAN, key_box, 1, border_radius=4)
+                    kt = fonts['tiny'].render(key, True, WHITE)
+                    screen.blit(kt, (80 + 22 - kt.get_width()//2,
+                                     y + 13 - kt.get_height()//2))
+                    dt = fonts['tiny'].render(desc, True, LIGHT_GRAY)
+                    screen.blit(dt, (134, y))
+                    y += 32
+            else:
+                # Network setup guide
+                y = 160
+                def draw_header(text, y_pos):
+                    pygame.draw.line(screen, LIGHT_GRAY, (80, y_pos), (WIDTH - 80, y_pos), 1)
+                    txt = fonts['small'].render(text, True, YELLOW)
+                    screen.blit(txt, (80, y_pos + 10))
+                    pygame.draw.line(screen, YELLOW, (80, y_pos + 40), (80 + txt.get_width(), y_pos + 40), 2)
+                    return y_pos + 60
+
+                def draw_cmd(cmd, y_pos):
+                    cmd_surf = fonts['tiny'].render(cmd, True, BLACK)
+                    cmd_box = pygame.Rect(100, y_pos, cmd_surf.get_width() + 20, 30)
+                    pygame.draw.rect(screen, CYAN, cmd_box, border_radius=4)
+                    screen.blit(cmd_surf, (110, y_pos + 5))
+                    return y_pos + 45
+
+                y = draw_header('STEP 1 — FIND YOUR IP', y)
+                txts = ['Both PCs: Open PowerShell → type ipconfig', 'Look for: Wireless LAN adapter Wi-Fi → IPv4 Address', 'Example: 192.168.43.145', 'OR: Check the Network screen in this game (shows automatically)']
+                for t in txts:
+                    screen.blit(fonts['tiny'].render(t, True, WHITE), (100, y))
+                    y += 25
+                y += 10
+
+                y = draw_header('STEP 2 — CONNECT SAME NETWORK', y)
+                txts = ['Both PCs connect to SAME WiFi or phone hotspot', 'Both IPs must start with same numbers: 192.168.43.x', 'Test: ping <partner_ip> in PowerShell']
+                for t in txts:
+                    screen.blit(fonts['tiny'].render(t, True, WHITE), (100, y))
+                    y += 25
+                y += 10
+
+                y = draw_header('STEP 3 — HOST PC (runs the game)', y)
+                screen.blit(fonts['tiny'].render('Open WSL2 terminal:', True, WHITE), (100, y))
+                y += 25
+                y = draw_cmd('source /opt/ros/jazzy/setup.bash', y)
+                y = draw_cmd('source ~/ros2_ws/install/setup.bash', y)
+                y = draw_cmd('ros2 run pong_game pygame_pong', y)
+                screen.blit(fonts['tiny'].render('Go to Network screen → Click START AS HOST', True, WHITE), (100, y))
+                y += 25
+                screen.blit(fonts['tiny'].render('Your paddle: LEFT side | Controls: W = Up, S = Down', True, WHITE), (100, y))
+                y += 25
+                y += 10
+
+                y = draw_header('STEP 4 — PARTNER PC (keyboard only)', y)
+                screen.blit(fonts['tiny'].render('Option A - Has ROS 2 + WSL2:', True, WHITE), (100, y))
+                y += 25
+                y = draw_cmd('source /opt/ros/jazzy/setup.bash', y)
+                y = draw_cmd('source ~/ros2_ws/install/setup.bash', y)
+                y = draw_cmd('python3 ~/pong_controller.py <HOST_IP>', y)
+                screen.blit(fonts['tiny'].render('Option B - Python on Windows only:', True, WHITE), (100, y))
+                y += 25
+                y = draw_cmd('python C:\\pong_controller.py <HOST_IP>', y)
+                y += 10
+
+                y = draw_header('STEP 5 — VERIFY CONNECTION', y)
+                screen.blit(fonts['tiny'].render('Host terminal shows: "Received from <partner_ip>: paddle2_y=360"', True, WHITE), (100, y))
+                y += 25
+                screen.blit(fonts['tiny'].render('Right paddle moves when partner presses W/S keys', True, WHITE), (100, y))
+                y += 10
+
+                y = draw_header('STEP 6 — PLAY', y)
+                screen.blit(fonts['tiny'].render('Host PC: W/S = Left paddle (Player 1)', True, WHITE), (100, y))
+                y += 25
+                screen.blit(fonts['tiny'].render('Partner: W/S or arrow keys = Right paddle (Player 2)', True, WHITE), (100, y))
+                y += 25
+                screen.blit(fonts['tiny'].render('First to reach winning score wins!', True, WHITE), (100, y))
+
             # Draw back button last so it's on top
             help_back_btn.draw(screen, fonts['small'])
             pygame.display.flip()            
+            
 
         elif state == 'settings':
             draw_settings(screen, fonts, settings, clock)
@@ -1108,7 +1147,20 @@ def main(args=None):
             draw_game(screen, node, fonts, mode, particles, trail, settings, clock)
 
         elif state == 'network':
-            draw_network(screen, fonts, back_btn)
+            result = draw_network(screen, fonts, back_btn)
+            if result == 'start':
+                try: sounds['click'].play()
+                except: pass
+                mode = 3
+                node._network_mode = True
+                node.reset_game()
+                trail.clear()
+                particles.clear()
+                state = 'game'
+            elif result == 'back':
+                try: sounds['click'].play()
+                except: pass
+                state = 'home'
 
         clock.tick(FPS)
 
