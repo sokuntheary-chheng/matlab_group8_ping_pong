@@ -1146,92 +1146,98 @@ def main(args=None):
             # Render tabs
             tab1_col = CYAN if help_tab == 0 else LIGHT_GRAY
             tab2_col = CYAN if help_tab == 1 else LIGHT_GRAY
+            screen.fill(DARK_GRAY)
+            # Render tabs
+            tab1_col = CYAN if help_tab == 0 else LIGHT_GRAY
+            tab2_col = CYAN if help_tab == 1 else LIGHT_GRAY
+            
+            # Tab highlight
+            if help_tab == 0:
+                pygame.draw.rect(screen, (40, 40, 60), (WIDTH//2 - 210, 60, 200, 50), border_radius=10)
+            else:
+                pygame.draw.rect(screen, (40, 40, 60), (WIDTH//2 + 10, 60, 200, 50), border_radius=10)
+
             t1 = fonts['small'].render('How to Play', True, tab1_col)
             t2 = fonts['small'].render('Network Setup', True, tab2_col)
-            screen.blit(t1, (WIDTH//2 - 200, 95))
-            screen.blit(t2, (WIDTH//2 + 20, 95))
-            if help_tab == 0:
-                pygame.draw.line(screen, CYAN, (WIDTH//2 - 200, 130), (WIDTH//2 - 200 + t1.get_width(), 130), 2)
-            else:
-                pygame.draw.line(screen, CYAN, (WIDTH//2 + 20, 130), (WIDTH//2 + 20 + t2.get_width(), 130), 2)
-            pygame.draw.line(screen, LIGHT_GRAY, (0, 135), (WIDTH, 135), 1)
+            screen.blit(t1, (WIDTH//2 - 200 + (200 - t1.get_width())//2, 70))
+            screen.blit(t2, (WIDTH//2 + 20 + (200 - t2.get_width())//2, 70))
+            pygame.draw.line(screen, LIGHT_GRAY, (0, 115), (WIDTH, 115), 1)
+
+            # Helper function
+            def draw_card(y, h):
+                card_rect = pygame.Rect(60, y, WIDTH - 120, h)
+                pygame.draw.rect(screen, (30, 30, 40), card_rect, border_radius=15)
+                pygame.draw.rect(screen, (60, 60, 80), card_rect, 2, border_radius=15)
+                return card_rect
 
             if help_tab == 0:
                 # ── SECTION 1: CONTROLS ──
+                draw_card(150, 150)
                 sec1 = fonts['small'].render('CONTROLS', True, YELLOW)
-                screen.blit(sec1, (80, 220))
-                pygame.draw.line(screen, YELLOW, (80, 250), (WIDTH - 80, 250), 1)
+                screen.blit(sec1, (80, 165))
+                pygame.draw.line(screen, YELLOW, (80, 195), (WIDTH - 80, 195), 1)
 
                 # Left sub-column - Player 1
                 p1_title = fonts['small'].render('Player 1  (LEFT paddle)', True, GREEN)
-                screen.blit(p1_title, (80, 263))
+                screen.blit(p1_title, (80, 210))
                 p1_lines = ['W  →  Move Up', 'S  →  Move Down']
-                y = 298
+                y_p1 = 245
                 for ln in p1_lines:
                     t = fonts['tiny'].render(ln, True, WHITE)
-                    screen.blit(t, (80, y))
-                    y += 28
+                    screen.blit(t, (80, y_p1))
+                    y_p1 += 25
 
                 # Vertical divider
-                pygame.draw.line(screen, LIGHT_GRAY,
-                    (WIDTH//2, 263), (WIDTH//2, 370), 1)
+                pygame.draw.line(screen, LIGHT_GRAY, (WIDTH//2, 210), (WIDTH//2, 280), 1)
 
                 # Right sub-column - Player 2 / AI
                 p2_title = fonts['small'].render('Player 2 / AI  (RIGHT paddle)', True, RED)
-                screen.blit(p2_title, (WIDTH//2 + 20, 263))
-                p2_lines = [
-                    '\u2191  \u2192  Move Up',
-                    '\u2193  \u2192  Move Down',
-                ]
-                y = 298
+                screen.blit(p2_title, (WIDTH//2 + 20, 210))
+                p2_lines = ['↑  →  Move Up', '↓  →  Move Down']
+                y_p2 = 245
                 for ln in p2_lines:
                     t = fonts['tiny'].render(ln, True, WHITE)
-                    screen.blit(t, (WIDTH//2 + 20, y))
-                    y += 28
-                ai_note = fonts['tiny'].render(
-                    'Single Player: right paddle = AI', True, LIGHT_GRAY)
-                screen.blit(ai_note, (WIDTH//2 + 20, y + 8))
+                    screen.blit(t, (WIDTH//2 + 20, y_p2))
+                    y_p2 += 25
+                ai_note = fonts['tiny'].render('Single Player: right paddle = AI', True, LIGHT_GRAY)
+                screen.blit(ai_note, (WIDTH//2 + 20, y_p2 + 5))
 
                 # ── SECTION 2: GAME RULES ──
-                pygame.draw.line(screen, LIGHT_GRAY, (80, 390), (WIDTH - 80, 390), 1)
+                draw_card(320, 160)
                 sec2 = fonts['small'].render('GAME RULES', True, YELLOW)
-                screen.blit(sec2, (80, 403))
-                pygame.draw.line(screen, YELLOW, (80, 433), (WIDTH - 80, 433), 1)
+                screen.blit(sec2, (80, 335))
+                pygame.draw.line(screen, YELLOW, (80, 365), (WIDTH - 80, 365), 1)
 
                 win_score = settings.get('gameplay', {}).get('winning_score', 5)
                 rules = [
-                    f'First player to reach  {win_score}  points wins  (changeable in Settings)',
+                    f'First player to reach {win_score} points wins (changeable in Settings)',
                     'Ball speed increases by a % after each paddle hit',
                     'After each point a 3-second countdown restarts the ball',
                     'Hit ball near paddle edge for sharper angle shots',
                 ]
-                y = 445
+                y_rules = 385
                 for rule in rules:
-                    bullet = fonts['tiny'].render(f'\u2022  {rule}', True, WHITE)
-                    screen.blit(bullet, (80, y))
-                    y += 32
+                    bullet = fonts['tiny'].render(f'•  {rule}', True, WHITE)
+                    screen.blit(bullet, (80, y_rules))
+                    y_rules += 40
 
                 # ── SECTION 3: SHORTCUTS ──
-                pygame.draw.line(screen, LIGHT_GRAY, (80, 585), (WIDTH - 80, 585), 1)
+                draw_card(500, 110)
                 sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
-                screen.blit(sec3, (80, 597))
-                pygame.draw.line(screen, YELLOW, (80, 627), (WIDTH - 80, 627), 1)
+                screen.blit(sec3, (80, 515))
+                pygame.draw.line(screen, YELLOW, (80, 545), (WIDTH - 80, 545), 1)
 
-                shortcuts = [
-                    ('ESC', 'Return to Home screen'),
-                    ('R',   'Restart current game'),
-                ]
-                y = 640
+                shortcuts = [('ESC', 'Return to Home screen'), ('R', 'Restart current game')]
+                y_s = 565
                 for key, desc in shortcuts:
-                    key_box = pygame.Rect(80, y - 2, 44, 26)
-                    pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=4)
-                    pygame.draw.rect(screen, CYAN, key_box, 1, border_radius=4)
+                    key_box = pygame.Rect(80, y_s - 5, 50, 30)
+                    pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=6)
+                    pygame.draw.rect(screen, CYAN, key_box, 1, border_radius=6)
                     kt = fonts['tiny'].render(key, True, WHITE)
-                    screen.blit(kt, (80 + 22 - kt.get_width()//2,
-                                     y + 13 - kt.get_height()//2))
+                    screen.blit(kt, (key_box.centerx - kt.get_width()//2, key_box.centery - kt.get_height()//2))
                     dt = fonts['tiny'].render(desc, True, LIGHT_GRAY)
-                    screen.blit(dt, (134, y))
-                    y += 32
+                    screen.blit(dt, (145, y_s))
+                    y_s += 40
             else:
                 # Network setup guide
                 y = 160
