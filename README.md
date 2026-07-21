@@ -65,13 +65,14 @@ The game showcases:
 |---|---|
 | 🤖 vs AI | Play against an AI opponent with Easy / Normal / Hard difficulty |
 | 👥 2 Players | Two players on the same PC using different keys |
-| 🌐 Network | Play across two PCs on the same WiFi — Guest sees full game display |
+| 🌐 Network | Play across two PCs with HOST/CLIENT roles — Heartbeat threshold (3 messages) ensures stable connections |
 | 🎵 Background Music | Retro chiptune music generated programmatically using NumPy |
 | 🔊 Sound Effects | Paddle hit, wall bounce, score, and win sounds |
 | ✨ Particle Effects | Visual particles on paddle hit and scoring |
 | 🏠 Home Screen | Animated menu with floating particles |
 | ⚙️ Settings Dashboard | 5-tab settings panel: Gameplay, Audio, Display, Controls, Accessibility |
 | 📡 rviz2 | Real-time MarkerArray visualization of ball, paddles, and walls |
+| 📋 Copy IP | Easy IP sharing with Copy button and selectable text field fallback for network mode |
 | 🏆 Score System | Custom PongScore message for score and win events |
 | ⚡ Speed Increase | Ball speeds up by configurable % with each paddle hit |
 | 🎨 Accessibility | Colorblind mode and high contrast mode |
@@ -225,7 +226,7 @@ source ~/.bashrc
 ### Step 7: Run the game 🎮
 ```bash
 ros2 run pong_game pygame_pong
-```
+````
 
 ---
 
@@ -251,47 +252,91 @@ ros2 run pong_game pygame_pong
 
 ### Network Mode (Across 2 PCs)
 
-Both PCs must be on the **same WiFi** and have the same `ROS_DOMAIN_ID` (default: 0).
+Both PCs must be on the **same WiFi** and have the same ROS_DOMAIN_ID (default: 0).
 
+#### Role Assignment
+- **HOST** = Player 1 on the **LEFT side** (authoritative ? controls game physics and state)
+- **CLIENT** = Player 2 on the **RIGHT side** (sends paddle input to HOST)
+
+#### Network Handshake & Synchronization
+The network handshake uses a **heartbeat threshold** to ensure stable connections:
+- HOST displays "Waiting for your partner to start..." until CLIENT connects
+- CLIENT displays "Waiting for host to start..." when connecting
+- Connection is confirmed after **3 consecutive paddle messages** within 1 second (prevents false starts from stray packets)
+- Once threshold is reached, the countdown begins and gameplay starts
+- All game state (ball physics, paddle positions) is authoritative from HOST
+- CLIENT sends only paddle input; HOST publishes the synchronized game state
+   `
 **Host PC (Player 1):**
 1. Launch the game normally:
-   ```bash
+   `ash
    ros2 run pong_game pygame_pong
-   ```
-2. Select **"Across 2 PCs"** → Press **SPACE** to start
-3. Control your paddle with **W / S**
-4. Your paddle is on the **LEFT side (GREEN)**
-
+   `
+2. Select **"Across 2 PCs"** from home screen
+3. Click **"?? Start as HOST"** or press **[H]**
+4. The Network screen will show:
+   - **Your IP Address** (in a selectable text field)
+   - **Copy IP button** for quick clipboard copy
+   - Share this IP with your partner
+5. Wait for your partner to connect (you will see "Waiting for your partner to start...")
+6. Once CLIENT connects (heartbeat threshold reached), the countdown begins
+7. Control your paddle with **W / S**
+   `
 **Guest PC (Player 2):**
 1. Clone and build the repo (see Installation)
-2. Run the guest client:
-   ```bash
-   ros2 run pong_game pong_client
-   ```
-3. You will see the **full game display** and control your paddle with **W / S**
-4. Your paddle is on the **RIGHT side (RED)**
-
-**If Guest paddle does not respond:**
-```bash
+2. Launch the game:
+   `ash
+   ros2 run pong_game pygame_pong
+   `
+3. Select **"Across 2 PCs"** from home screen
+4. Click **"?? Join as CLIENT"** or press **[C]**
+5. Enter the HOST's IP address (paste from clipboard or type manually)
+6. Click **"? Connect"**
+7. You will see "Waiting for host to start..." while handshaking
+8. Once you start moving your paddle (3+ messages), the connection is confirmed
+9. The full game display will appear
+10. Control your paddle with **W / S**
+   `
+**Troubleshooting Network Mode:**
+   `
+If CLIENT paddle does not respond:
+`ash
 # Run on both PCs before launching
 export ROS_DOMAIN_ID=0
-```
-
+# Then re-source and re-run
+source ~/ros2_ws/install/setup.bash
+ros2 run pong_game pygame_pong
+`
+   `
+**Debug Information:**
+- Both GUIs show an on-screen debug overlay with:
+  - **ROLE**: Displays HOST or CLIENT
+  - **Client seen / Last sent**: Timestamp of last network traffic
+- Terminal logs show heartbeat progress: [Net] Heartbeat 1/3, [Net] Heartbeat 2/3, etc.
+   `
 ### General Controls
-
-| Key | Action |
+   `
+| Key / Button | Action |
 |---|---|
 | ESC | Return to Home screen |
 | R | Restart current game |
-| W / S | Move paddle (Player 1 or Guest) |
-| ↑ / ↓ | Move paddle (Player 2 local) |
-
+| W / S | Move paddle (Player 1, Player 2 local, or HOST/CLIENT network) |
+| ? / ? | Move paddle (Player 2 local only) |
+| [H] | Start as HOST (Network mode) |
+| [C] | Join as CLIENT (Network mode) |
+   `
+**Network Mode Buttons:**
+- **"?? Start as HOST"** - Begin as the authoritative host
+- **"?? Join as CLIENT"** - Connect to a host's IP address
+- **"Copy IP"** - Quick clipboard copy of your IP (fallback: manually select and copy from text field)
+- **"? Connect"** - Confirm connection when joining as CLIENT
+   `
 ---
-
+   `
 ## ⚙️ Settings
-
+   `
 Access settings from the **Home screen → Settings button**.
-
+   `
 | Tab | Options |
 |---|---|
 | **Gameplay** | Ball starting speed, speed increase per hit, winning score (5/10/15/20), difficulty (Easy/Normal/Hard) |
@@ -299,9 +344,9 @@ Access settings from the **Home screen → Settings button**.
 | **Display** | FPS counter, particle effects, court lines |
 | **Controls** | View current key bindings |
 | **Accessibility** | Colorblind mode, high contrast mode |
-
+   `
 Settings are saved automatically to `~/.pong_settings.json`.
-
+   `
 ---
 
 ## 📁 Project Structure
@@ -362,14 +407,17 @@ source install/setup.bash
 ### pygame AVX2 warning
 This is just a warning, not an error. The game runs fine.
 
-### Network mode — Guest paddle not responding
-```bash
-# Run on BOTH PCs
-export ROS_DOMAIN_ID=0
-# Then re-source and re-run
-source ~/ros2_ws/install/setup.bash
-ros2 run pong_game pong_client
-```
+### Network mode ? Guest paddle not responding
+This can happen if the heartbeat threshold has not been reached yet. Ensure:
+1. Both PCs are on the same WiFi network
+2. Run on BOTH PCs before launching:
+   \\ash
+   export ROS_DOMAIN_ID=0
+   source ~/ros2_ws/install/setup.bash
+   \3. CLIENT must send at least 3 paddle input messages within 1 second to complete handshake
+4. Check terminal logs for heartbeat progress: [Net] Heartbeat 1/3, [Net] Heartbeat 2/3, [Net] Heartbeat 3/3
+5. Verify on-screen debug overlay shows correct role (HOST or CLIENT) and last-seen/last-sent timestamps
+6. If still not working, see the Verify ROS 2 topics section below
 
 ### Verify ROS 2 topics are active
 ```bash

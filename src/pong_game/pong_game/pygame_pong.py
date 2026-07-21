@@ -218,6 +218,8 @@ class PongNode(Node):
         self._network_host_ip = None  # IP address if CLIENT mode
         self._client_last_seen = None  # timestamp of last paddle input from CLIENT (HOST uses this to detect partner)
         self._last_paddle_sent = None   # timestamp when this node (if CLIENT) last published paddle input
+        self._client_paddle_count = 0  # heartbeat counter: consecutive paddle messages from CLIENT (HOST uses to gate start)
+        self._client_last_paddle_time = None  # timestamp of last received paddle input (used for heartbeat window)
 
         self.settings = settings_dict or {}
 
@@ -254,6 +256,8 @@ class PongNode(Node):
         if self._network_mode:
             self.game_status = 0  # 0 = waiting for partner / waiting for host to start
             self._client_last_seen = None
+            self._client_paddle_count = 0  # reset heartbeat counter
+            self._client_last_paddle_time = None  # reset heartbeat timer
             # Host will publish waiting state; clients will just wait for host state messages
             self.publish_score_event(0, 'start', '')
             # Do not start countdown until host starts the match (host will call start_countdown)
@@ -337,8 +341,9 @@ class PongNode(Node):
 
     def paddle_callback(self, msg):
         """Receive paddle positions from keyboard_controller (network/Across 2 PCs mode).
-        Also used as a lightweight presence/handshake: HOST will mark client as seen and
-        start the game (countdown) once a CLIENT publishes its first paddle input.
+        Implements heartbeat threshold: HOST requires N=3 consecutive paddle messages
+        (within 1 second window) before starting the countdown. This prevents false starts
+        from stray or delayed packets.
         """
         now = time.time()
         # record last seen time for client presence detection
@@ -363,14 +368,35 @@ class PongNode(Node):
         except Exception:
             pass
 
-        # If running as HOST and currently waiting for a partner, start the game on first contact
+        # Heartbeat threshold: HOST requires N=3 consecutive paddle messages within 1 second
         if self._network_mode and getattr(self, '_network_role', 'HOST') == 'HOST' and self.game_status == 0:
-            try:
-                self.get_logger().info('[Net] Client connected — starting countdown')
-            except Exception:
-                pass
-            self.game_status = 1
-            self.start_countdown(0)
+            # Check if this message is within the heartbeat window (1 second)
+            if self._client_last_paddle_time is None or (now - self._client_last_paddle_time) < 1.0:
+                self._client_paddle_count += 1
+                self._client_last_paddle_time = now
+                try:
+                    self.get_logger().info(f'[Net] Heartbeat {self._client_paddle_count}/3 at {time.strftime("%H:%M:%S", time.localtime(now))}')
+                except Exception:
+                    pass
+            else:
+                # Message is outside the window, reset counter
+                self._client_paddle_count = 1
+                self._client_last_paddle_time = now
+                try:
+                    self.get_logger().info(f'[Net] Heartbeat window expired, resetting. Message at {time.strftime("%H:%M:%S", time.localtime(now))}')
+                except Exception:
+                    pass
+            
+            # Start countdown when threshold (N=3) is reached
+            if self._client_paddle_count >= 3:
+                try:
+                    self.get_logger().info('[Net] Heartbeat threshold reached (N=3) ? starting countdown')
+                except Exception:
+                    pass
+                self.game_status = 1
+                self.start_countdown(0)
+                self._client_paddle_count = 0  # reset for next game
+                self._client_last_paddle_time = None
 
 # ─── Drawing helpers ─────────────────────────────────────
 def draw_card(screen, y, h):
@@ -595,14 +621,18 @@ def draw_network(screen, fonts, host_btn, join_btn, back_btn_local, copy_btn=Non
     ip_label = fonts['small'].render('Your IP Address:', True, WHITE)
     screen.blit(ip_label, (WIDTH//2 - ip_label.get_width()//2, 120))
 
-    ip_box = pygame.Rect(WIDTH//2 - 150, 150, 300, 50)
-    pygame.draw.rect(screen, DARK_GRAY, ip_box, border_radius=6)
-    pygame.draw.rect(screen, CYAN, ip_box, 2, border_radius=6)
+    ip_box = pygame.Rect(WIDTH//2 - 160, 150, 320, 50)
+    pygame.draw.rect(screen, (50, 50, 70), ip_box, border_radius=6)
+    pygame.draw.rect(screen, CYAN, ip_box, 3, border_radius=6)
     ip_text = fonts['small'].render(host_ip, True, CYAN)
     screen.blit(ip_text, (ip_box.centerx - ip_text.get_width()//2, ip_box.centery - ip_text.get_height()//2))
+    
+    # Selectable text field hint
+    select_hint = fonts['tiny'].render('(Click to select) or use Copy IP button below', True, LIGHT_GRAY)
+    screen.blit(select_hint, (WIDTH//2 - select_hint.get_width()//2, 205))
 
     share_label = fonts['tiny'].render('Share this IP with your partner', True, LIGHT_GRAY)
-    screen.blit(share_label, (WIDTH//2 - share_label.get_width()//2, 210))
+    screen.blit(share_label, (WIDTH//2 - share_label.get_width()//2, 225))
 
     # Draw buttons
     host_btn.draw(screen, fonts['small'])
