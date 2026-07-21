@@ -597,6 +597,13 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict, clock=
         waiting_txt = fonts['medium'].render('Waiting for your partner to start...', True, YELLOW)
         screen.blit(waiting_txt, (WIDTH//2 - waiting_txt.get_width()//2, HEIGHT//2 - 20))
 
+    if mode == 3 and hasattr(node, '_network_role') and getattr(node, '_network_role', 'HOST') == 'CLIENT' and node.game_status == 0:
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        screen.blit(overlay, (0, 0))
+        waiting_txt = fonts['medium'].render('Waiting for host to start...', True, YELLOW)
+        screen.blit(waiting_txt, (WIDTH//2 - waiting_txt.get_width()//2, HEIGHT//2 - 20))
+
     if node.countdown_active:
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 100))
@@ -1035,24 +1042,27 @@ def update_game(node, keys, mode, sounds, particles, trail, settings_dict, dt):
         node.update_countdown(dt)
         return
 
-    if mode == 3 and getattr(node, '_network_role', 'HOST') == 'CLIENT':
-        if keys[pygame.K_w] or keys[pygame.K_UP]:
-            node.my_paddle_y = min(node.my_paddle_y + node.paddle_speed, node.limit)
-        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            node.my_paddle_y = max(node.my_paddle_y - node.paddle_speed, -node.limit)
-        half = PADDLE_H // 2
-        node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * ((HEIGHT // 2 - half) / 2.25))
-        node.paddle2_y = max(half, min(node.paddle2_y, HEIGHT - half))
-        if node.game_status != 1:
-            return
-
-    elif node.game_status != 1:
-        return
-
     ball_speed = max(abs(node.ball_vx), abs(node.ball_vy), 1.0)
     paddle_speed = ball_speed * 0.88
     paddle_speed = min(paddle_speed, ball_speed * 0.95)
     paddle_speed = max(3.0, min(paddle_speed, 20.0))
+    half = PADDLE_H // 2
+    norm_to_pixel = (HEIGHT // 2 - half) / 2.25
+    norm_speed = paddle_speed / norm_to_pixel
+
+    if mode == 3 and getattr(node, '_network_role', 'HOST') == 'CLIENT':
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            node.my_paddle_y = min(node.my_paddle_y + norm_speed, node.limit)
+        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            node.my_paddle_y = max(node.my_paddle_y - norm_speed, -node.limit)
+        node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * norm_to_pixel)
+        node.paddle2_y = max(half, min(node.paddle2_y, HEIGHT - half))
+        # CLIENT should not simulate game physics locally. It only sends paddle input and
+        # renders authoritative state received from the HOST.
+        return
+
+    elif node.game_status != 1:
+        return
 
     # Player 1 always uses W/S
     if keys[pygame.K_w]:
@@ -1069,16 +1079,8 @@ def update_game(node, keys, mode, sounds, particles, trail, settings_dict, dt):
     elif mode == 3:
         # Network mode
         if getattr(node, '_network_role', 'HOST') == 'CLIENT':
-            # CLIENT: update a normalized paddle value from local input and reflect it locally,
-            # but do not run authoritative physics — publish paddle input via publish_state()
-            if keys[pygame.K_w] or keys[pygame.K_UP]:
-                node.my_paddle_y = min(node.my_paddle_y + node.paddle_speed, node.limit)
-            if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-                node.my_paddle_y = max(node.my_paddle_y - node.paddle_speed, -node.limit)
-            # Convert normalized value to pixel Y for local display
-            half = PADDLE_H // 2
-            node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * ((HEIGHT // 2 - half) / 2.25))
-            node.paddle2_y = max(half, min(node.paddle2_y, HEIGHT - half))
+            # CLIENT: paddle already updated above; do not run authoritative physics here.
+            pass
         else:
             # HOST: paddle2 will be driven by incoming paddle_callback messages
             pass

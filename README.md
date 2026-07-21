@@ -266,77 +266,67 @@ The network handshake uses a **heartbeat threshold** to ensure stable connection
 - Once threshold is reached, the countdown begins and gameplay starts
 - All game state (ball physics, paddle positions) is authoritative from HOST
 - CLIENT sends only paddle input; HOST publishes the synchronized game state
-   `
+
 **Host PC (Player 1):**
 1. Launch the game normally:
-   `ash
+   ```bash
    ros2 run pong_game pygame_pong
-   `
+   ```
 2. Select **"Across 2 PCs"** from home screen
-3. Click **"?? Start as HOST"** or press **[H]**
-4. The Network screen will show:
-   - **Your IP Address** (in a selectable text field)
-   - **Copy IP button** for quick clipboard copy
+3. Click **"Start as HOST"** or press **[H]**
+4. The network screen will show:
+   - **Your IP Address** in a selectable text field
+   - **Copy IP** button for quick clipboard copy
    - Share this IP with your partner
 5. Wait for your partner to connect (you will see "Waiting for your partner to start...")
 6. Once CLIENT connects (heartbeat threshold reached), the countdown begins
 7. Control your paddle with **W / S**
-   `
+
 **Guest PC (Player 2):**
 1. Clone and build the repo (see Installation)
-2. Launch the game:
-   `ash
+   ```bash
    ros2 run pong_game pygame_pong
-   `
-3. Select **"Across 2 PCs"** from home screen
-4. Click **"?? Join as CLIENT"** or press **[C]**
-5. Enter the HOST's IP address (paste from clipboard or type manually)
-6. Click **"? Connect"**
-7. You will see "Waiting for host to start..." while handshaking
-8. Once you start moving your paddle (3+ messages), the connection is confirmed
-9. The full game display will appear
-10. Control your paddle with **W / S**
-   `
+   ```
+2. Select **"Across 2 PCs"** from home screen
+3. Click **"Join as CLIENT"** or press **[C]**
+4. Enter the HOST's IP address (paste from clipboard or type manually)
+5. Click **"Connect"**
+6. You will see "Waiting for host to start..." while handshaking
+7. Once you start moving your paddle, the connection is confirmed
+8. The full game display will appear
+9. Control your paddle with **W / S**
 **Troubleshooting Network Mode:**
-   `
-If CLIENT paddle does not respond:
-`ash
+```bash
 # Run on both PCs before launching
 export ROS_DOMAIN_ID=0
 # Then re-source and re-run
 source ~/ros2_ws/install/setup.bash
 ros2 run pong_game pygame_pong
-`
-   `
+```
 **Debug Information:**
 - Both GUIs show an on-screen debug overlay with:
   - **ROLE**: Displays HOST or CLIENT
   - **Client seen / Last sent**: Timestamp of last network traffic
 - Terminal logs show heartbeat progress: [Net] Heartbeat 1/3, [Net] Heartbeat 2/3, etc.
-   `
+
 ### General Controls
-   `
 | Key / Button | Action |
 |---|---|
 | ESC | Return to Home screen |
 | R | Restart current game |
 | W / S | Move paddle (Player 1, Player 2 local, or HOST/CLIENT network) |
-| ? / ? | Move paddle (Player 2 local only) |
+| ↑ / ↓ | Move paddle (Player 2 local only) |
 | [H] | Start as HOST (Network mode) |
 | [C] | Join as CLIENT (Network mode) |
-   `
+
 **Network Mode Buttons:**
-- **"?? Start as HOST"** - Begin as the authoritative host
-- **"?? Join as CLIENT"** - Connect to a host's IP address
+- **"Start as HOST"** - Begin as the authoritative host
+- **"Join as CLIENT"** - Connect to a host's IP address
 - **"Copy IP"** - Quick clipboard copy of your IP (fallback: manually select and copy from text field)
-- **"? Connect"** - Confirm connection when joining as CLIENT
-   `
+- **"Connect"** - Confirm connection when joining as CLIENT
 ---
-   `
 ## ⚙️ Settings
-   `
 Access settings from the **Home screen → Settings button**.
-   `
 | Tab | Options |
 |---|---|
 | **Gameplay** | Ball starting speed, speed increase per hit, winning score (5/10/15/20), difficulty (Easy/Normal/Hard) |
@@ -344,9 +334,7 @@ Access settings from the **Home screen → Settings button**.
 | **Display** | FPS counter, particle effects, court lines |
 | **Controls** | View current key bindings |
 | **Accessibility** | Colorblind mode, high contrast mode |
-   `
 Settings are saved automatically to `~/.pong_settings.json`.
-   `
 ---
 
 ## 📁 Project Structure
