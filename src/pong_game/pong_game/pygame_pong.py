@@ -1278,9 +1278,8 @@ def main(args=None):
 
             t1 = fonts['small'].render('How to Play', True, tab1_col)
             t2 = fonts['small'].render('Network Setup', True, tab2_col)
-            screen.blit(t1, (WIDTH//2 - 105 - t1.get_width()//2, 40))
-            screen.blit(t2, (WIDTH//2 + 105 - t2.get_width()//2, 40))
-            pygame.draw.line(screen, LIGHT_GRAY, (0, 85), (WIDTH, 85), 1)
+            screen.blit(t1, (WIDTH//2 - 107.5 - t1.get_width()//2, 40))
+            screen.blit(t2, (WIDTH//2 + 107.5 - t2.get_width()//2, 40))
             
             # Draw back button last so it's on top
             help_back_btn.draw(screen, fonts['small'])
