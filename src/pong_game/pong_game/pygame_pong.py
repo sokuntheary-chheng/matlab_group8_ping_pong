@@ -1251,8 +1251,8 @@ def main(args=None):
 
                 y = draw_step('STEP 1 — FIND YOUR IP', ['Both PCs: Open PowerShell → type ipconfig', 'Look for: Wireless LAN adapter Wi-Fi → IPv4 Address', 'Example: 192.168.43.145', 'OR: Check the Network screen in this game (shows automatically)'], y)
                 y = draw_step('STEP 2 — CONNECT SAME NETWORK', ['Both PCs connect to SAME WiFi or phone hotspot', 'Both IPs must start with same numbers: 192.168.43.x', 'Test: ping <partner_ip> in PowerShell'], y)
-                y = draw_step('STEP 3 — HOST PC', ['Open WSL2 terminal:', 'source /opt/ros/jazzy/setup.bash', 'source ~/ros2_ws/install/setup.bash', 'ros2 run pong_game pygame_pong', 'Go to Network screen → Click START AS HOST'], y)
-                y = draw_step('STEP 4 — PARTNER PC', ['Option A - Has ROS 2 + WSL2:', 'source /opt/ros/jazzy/setup.bash', 'source ~/ros2_ws/install/setup.bash', 'python3 ~/pong_controller.py <HOST_IP>', 'Option B - Python on Windows only:', 'python C:\\pong_controller.py <HOST_IP>'], y)
+                y = draw_step('STEP 3 — HOST PC', ['Open WSL2 terminal:', 'source /opt/ros/jazzy/setup.bash', 'source install/setup.bash', 'ros2 run pong_game pygame_pong', 'Go to Network screen → Click START AS HOST'], y)
+                y = draw_step('STEP 4 — PARTNER PC (Guest)', ['Open WSL2 terminal:', 'source /opt/ros/jazzy/setup.bash', 'source install/setup.bash', 'ros2 run pong_game pong_client', 'You will see the full game display', 'Control your paddle with W / S keys'], y)
 
             # 2. Draw fixed tab navigation bar ON TOP
             pygame.draw.rect(screen, DARK_GRAY, (0, 0, WIDTH, 116)) # Background for tabs
