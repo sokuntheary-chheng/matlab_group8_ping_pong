@@ -205,8 +205,11 @@ class PongNode(Node):
             PongGameState, '/pong/game_state', 10)
         self.score_pub = self.create_publisher(      # publisher for score events (scores, wins)
             PongScore, '/pong/score_event', 10)
-        self.paddle_sub = self.create_subscription(  # subscriber for network P2 paddle input
+        # Subscriber for network P2 paddle input
+        self.paddle_sub = self.create_subscription(
             PongGameState, '/pong/paddle_input', self.paddle_callback, 10)
+        # Publisher for paddle input when running as CLIENT in the full GUI
+        self.paddle_pub = self.create_publisher(PongGameState, '/pong/paddle_input', 10)
         self.create_timer(0.05, self.publish_state)
         # calls publish_state() every 0.05 seconds = 20 times per second (20Hz)
         self.get_logger().info('ROS2 Pong Node started!')
@@ -214,6 +217,7 @@ class PongNode(Node):
         self._network_role = 'HOST'  # 'HOST' or 'CLIENT'
         self._network_host_ip = None  # IP address if CLIENT mode
         self._client_last_seen = None  # timestamp of last paddle input from CLIENT (HOST uses this to detect partner)
+        self._last_paddle_sent = None   # timestamp when this node (if CLIENT) last published paddle input
 
         self.settings = settings_dict or {}
 
@@ -229,6 +233,11 @@ class PongNode(Node):
         self.game_status = 1
         self.speed_mult  = 1.0
 
+        # Client-side normalized paddle (used when this GUI is a CLIENT)
+        self.my_paddle_y  = 0.0   # normalized -2.25 .. 2.25 (same convention as pong_client)
+        self.paddle_speed = 0.3
+        self.limit        = 2.25
+
         # Countdown timer state
         self.countdown_active = False
         self.countdown_time = 0.0
@@ -241,14 +250,15 @@ class PongNode(Node):
         self.score1      = 0
         self.score2      = 0
         self.speed_mult  = 1.0
-        # In network HOST mode, start in waiting state until a CLIENT connects
-        if self._network_mode and getattr(self, '_network_role', 'HOST') == 'HOST':
-            self.game_status = 0  # 0 = waiting for partner
+        # Networked mode: both HOST and CLIENT should show waiting until the Host starts the match
+        if self._network_mode:
+            self.game_status = 0  # 0 = waiting for partner / waiting for host to start
             self._client_last_seen = None
-            # publish a 'start' score event so clients can see the waiting state
+            # Host will publish waiting state; clients will just wait for host state messages
             self.publish_score_event(0, 'start', '')
-            # Do not start countdown until client contact
+            # Do not start countdown until host starts the match (host will call start_countdown)
         else:
+            # Local (non-network) behavior: start immediately
             self.game_status = 1
             self.publish_score_event(0, 'start', '')
             self.start_countdown(0)
@@ -294,6 +304,25 @@ class PongNode(Node):
             f'[ScoreEvent] {event_type} | {self.score1}-{self.score2}')
 
     def publish_state(self):
+        # If in network mode and this node is a CLIENT, do not publish authoritative game_state.
+        # Instead, publish only paddle input messages to /pong/paddle_input so the HOST can
+        # receive and apply remote paddle movement.
+        if self._network_mode and getattr(self, '_network_role', 'HOST') != 'HOST':
+            try:
+                pm = PongGameState()
+                pm.paddle2_y = float(self.my_paddle_y)
+                self.paddle_pub.publish(pm)
+                # record last-sent timestamp for client-side debug
+                self._last_paddle_sent = time.time()
+                try:
+                    self.get_logger().info(f'[Net] Published paddle input at {time.strftime("%H:%M:%S", time.localtime(self._last_paddle_sent))}')
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            return
+
+        # Otherwise (local game or HOST in network mode), publish authoritative game state
         msg                = PongGameState()
         msg.ball_x         = float(self.ball_x)
         msg.ball_y         = float(self.ball_y)
@@ -311,11 +340,18 @@ class PongNode(Node):
         Also used as a lightweight presence/handshake: HOST will mark client as seen and
         start the game (countdown) once a CLIENT publishes its first paddle input.
         """
+        now = time.time()
         # record last seen time for client presence detection
         try:
-            self._client_last_seen = time.time()
+            self._client_last_seen = now
         except Exception:
             self._client_last_seen = None
+
+        # Log receipt for debugging
+        try:
+            self.get_logger().info(f'[Net] Received paddle input at {time.strftime("%H:%M:%S", time.localtime(now))}')
+        except Exception:
+            pass
 
         # Always update paddle2_y from incoming message so HOST can preview partner position
         try:
@@ -329,6 +365,10 @@ class PongNode(Node):
 
         # If running as HOST and currently waiting for a partner, start the game on first contact
         if self._network_mode and getattr(self, '_network_role', 'HOST') == 'HOST' and self.game_status == 0:
+            try:
+                self.get_logger().info('[Net] Client connected — starting countdown')
+            except Exception:
+                pass
             self.game_status = 1
             self.start_countdown(0)
 
@@ -475,6 +515,25 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict, clock=
         role_color = GREEN if node._network_role == 'HOST' else BLUE
         role_surf = fonts['tiny'].render(role_text, True, role_color)
         screen.blit(role_surf, (WIDTH - role_surf.get_width() - 10, 10))
+
+        # Debug indicator: last-seen and last-sent timestamps
+        # Client-last-seen (HOST view)
+        if getattr(node, '_client_last_seen', None):
+            elapsed = time.time() - node._client_last_seen
+            last_seen_txt = f'Client seen: {int(elapsed)}s ago'
+        else:
+            last_seen_txt = 'Client seen: never'
+        last_seen_surf = fonts['tiny'].render(last_seen_txt, True, LIGHT_GRAY)
+        screen.blit(last_seen_surf, (WIDTH - last_seen_surf.get_width() - 10, 30))
+
+        # Last paddle sent (CLIENT view)
+        if getattr(node, '_last_paddle_sent', None):
+            elapsed2 = time.time() - node._last_paddle_sent
+            last_sent_txt = f'Last sent: {int(elapsed2)}s ago'
+        else:
+            last_sent_txt = 'Last sent: never'
+        last_sent_surf = fonts['tiny'].render(last_sent_txt, True, LIGHT_GRAY)
+        screen.blit(last_sent_surf, (WIDTH - last_sent_surf.get_width() - 10, 50))
 
     esc = fonts['tiny'].render('ESC=Home  R=Restart', True, LIGHT_GRAY)
     screen.blit(esc, (WIDTH//2 - esc.get_width()//2, HEIGHT-30))
@@ -946,8 +1005,21 @@ def update_game(node, keys, mode, sounds, particles, trail, settings_dict, dt):
         if keys[pygame.K_DOWN]:
             node.paddle2_y = min(node.paddle2_y + paddle_speed, HEIGHT - PADDLE_H//2)
     elif mode == 3:
-        # Network mode: paddle2 driven by paddle_callback via /pong/paddle_input
-        pass
+        # Network mode
+        if getattr(node, '_network_role', 'HOST') == 'CLIENT':
+            # CLIENT: update a normalized paddle value from local input and reflect it locally,
+            # but do not run authoritative physics — publish paddle input via publish_state()
+            if keys[pygame.K_w] or keys[pygame.K_UP]:
+                node.my_paddle_y = min(node.my_paddle_y + node.paddle_speed, node.limit)
+            if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+                node.my_paddle_y = max(node.my_paddle_y - node.paddle_speed, -node.limit)
+            # Convert normalized value to pixel Y for local display
+            half = PADDLE_H // 2
+            node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * ((HEIGHT // 2 - half) / 2.25))
+            node.paddle2_y = max(half, min(node.paddle2_y, HEIGHT - half))
+        else:
+            # HOST: paddle2 will be driven by incoming paddle_callback messages
+            pass
     elif mode == 1:
         # AI
         target = node.ball_y + random.uniform(-15, 15)
