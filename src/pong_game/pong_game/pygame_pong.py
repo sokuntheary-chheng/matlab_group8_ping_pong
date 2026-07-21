@@ -993,8 +993,8 @@ def main(args=None):
             elif state == 'help':
                 # Handle tab clicks
                 mouse_pos = pygame.mouse.get_pos()
-                tab1_rect = pygame.Rect(WIDTH//2 - 210, 60, 200, 50)
-                tab2_rect = pygame.Rect(WIDTH//2 + 10, 60, 200, 50)
+                tab1_rect = pygame.Rect(WIDTH//2 - 205, 30, 200, 50)
+                tab2_rect = pygame.Rect(WIDTH//2 + 5, 30, 200, 50)
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if tab1_rect.collidepoint(event.pos):
                         help_tab = 0
@@ -1167,38 +1167,41 @@ def main(args=None):
             # 1. Draw scrollable content first
             if help_tab == 0:
                 # ── SECTION 1: CONTROLS ──
-                draw_card(screen, 150 - scroll_offset, 150)
+                # Card height: Header (60) + 3 lines (25*3=75) + padding = 145
+                draw_card(screen, 125 - scroll_offset, 145)
                 sec1 = fonts['small'].render('CONTROLS', True, YELLOW)
-                screen.blit(sec1, (80, 165 - scroll_offset))
-                pygame.draw.line(screen, YELLOW, (80, 195 - scroll_offset), (WIDTH - 80, 195 - scroll_offset), 1)
+                screen.blit(sec1, (80, 140 - scroll_offset))
+                pygame.draw.line(screen, YELLOW, (80, 170 - scroll_offset), (WIDTH - 80, 170 - scroll_offset), 1)
 
                 # Left sub-column - Player 1
-                p1_title = fonts['small'].render('Player 1  (LEFT paddle)', True, GREEN)
-                screen.blit(p1_title, (80, 210 - scroll_offset))
-                p1_lines = ['W  →  Move Up', 'S  →  Move Down']
-                y_p1 = 245 - scroll_offset
+                p1_title = fonts['small'].render('Player 1 (Left)', True, GREEN)
+                screen.blit(p1_title, (80, 185 - scroll_offset))
+                p1_lines = ['W → Move Up', 'S → Move Down']
+                y_p1 = 215 - scroll_offset
                 for ln in p1_lines:
                     t = fonts['tiny'].render(ln, True, WHITE)
                     screen.blit(t, (80, y_p1))
                     y_p1 += 25
 
                 # Vertical divider
-                pygame.draw.line(screen, LIGHT_GRAY, (WIDTH//2, 210 - scroll_offset), (WIDTH//2, 280 - scroll_offset), 1)
+                pygame.draw.line(screen, LIGHT_GRAY, (WIDTH//2, 185 - scroll_offset), (WIDTH//2, 260 - scroll_offset), 1)
 
                 # Right sub-column - Player 2 / AI
-                p2_title = fonts['small'].render('Player 2 / AI  (RIGHT paddle)', True, RED)
-                screen.blit(p2_title, (WIDTH//2 + 20, 210 - scroll_offset))
-                p2_lines = ['↑  →  Move Up', '↓  →  Move Down']
-                y_p2 = 245 - scroll_offset
+                p2_title = fonts['small'].render('Player 2 / AI (Right)', True, RED)
+                screen.blit(p2_title, (WIDTH//2 + 20, 185 - scroll_offset))
+                p2_lines = ['↑ → Move Up', '↓ → Move Down']
+                y_p2 = 215 - scroll_offset
                 for ln in p2_lines:
                     t = fonts['tiny'].render(ln, True, WHITE)
                     screen.blit(t, (WIDTH//2 + 20, y_p2))
                     y_p2 += 25
+                
                 # ── SECTION 2: GAME RULES ──
-                draw_card(screen, 320 - scroll_offset, 230)
+                # Spacing: Previous card ends at 125+145 = 270. Gap = 15. Start = 285.
+                draw_card(screen, 285 - scroll_offset, 230)
                 sec2 = fonts['small'].render('GAME RULES', True, YELLOW)
-                screen.blit(sec2, (80, 335 - scroll_offset))
-                pygame.draw.line(screen, YELLOW, (80, 365 - scroll_offset), (WIDTH - 80, 365 - scroll_offset), 1)
+                screen.blit(sec2, (80, 300 - scroll_offset))
+                pygame.draw.line(screen, YELLOW, (80, 330 - scroll_offset), (WIDTH - 80, 330 - scroll_offset), 1)
 
                 win_score = settings.get('gameplay', {}).get('winning_score', 5)
                 rules = [
@@ -1207,20 +1210,21 @@ def main(args=None):
                     'After each point a 3-second countdown restarts the ball',
                     'Hit ball near paddle edge for sharper angle shots',
                 ]
-                y_rules = 385 - scroll_offset
+                y_rules = 350 - scroll_offset
                 for rule in rules:
                     bullet = fonts['tiny'].render(f'•  {rule}', True, WHITE)
                     screen.blit(bullet, (80, y_rules))
                     y_rules += 40
 
                 # ── SECTION 3: SHORTCUTS ──
-                draw_card(screen, 565 - scroll_offset, 150)
+                # Spacing: Previous card ends at 285+230 = 515. Gap = 15. Start = 530.
+                draw_card(screen, 530 - scroll_offset, 150)
                 sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
-                screen.blit(sec3, (80, 580 - scroll_offset))
-                pygame.draw.line(screen, YELLOW, (80, 610 - scroll_offset), (WIDTH - 80, 610 - scroll_offset), 1)
+                screen.blit(sec3, (80, 545 - scroll_offset))
+                pygame.draw.line(screen, YELLOW, (80, 575 - scroll_offset), (WIDTH - 80, 575 - scroll_offset), 1)
 
                 shortcuts = [('ESC', 'Return to Home screen'), ('R', 'Restart current game')]
-                y_s = 630 - scroll_offset
+                y_s = 595 - scroll_offset
                 for key, desc in shortcuts:
                     key_box = pygame.Rect(80, y_s - 5, 50, 30)
                     pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=6)
@@ -1232,7 +1236,7 @@ def main(args=None):
                     y_s += 40
             else:
                 # Network setup guide
-                y = 150 - scroll_offset
+                y = 125 - scroll_offset
                 def draw_step(header, lines, y_pos):
                     h = 60 + len(lines) * 25 + 10
                     draw_card(screen, y_pos, h)
@@ -1247,7 +1251,7 @@ def main(args=None):
                         if isinstance(line, str):
                             screen.blit(fonts['tiny'].render(line, True, WHITE), (100, y_content))
                         y_content += 25
-                    return y_pos + h + 10
+                    return y_pos + h + 15
 
                 y = draw_step('STEP 1 — FIND YOUR IP', ['Both PCs: Open PowerShell → type ipconfig', 'Look for: Wireless LAN adapter Wi-Fi → IPv4 Address', 'Example: 192.168.43.145', 'OR: Check the Network screen in this game (shows automatically)'], y)
                 y = draw_step('STEP 2 — CONNECT SAME NETWORK', ['Both PCs connect to SAME WiFi or phone hotspot', 'Both IPs must start with same numbers: 192.168.43.x', 'Test: ping <partner_ip> in PowerShell'], y)
@@ -1255,13 +1259,13 @@ def main(args=None):
                 y = draw_step('STEP 4 — PARTNER PC (Guest)', ['Open WSL2 terminal:', 'source /opt/ros/jazzy/setup.bash', 'source install/setup.bash', 'ros2 run pong_game pong_client', 'You will see the full game display', 'Control your paddle with W / S keys'], y)
 
             # 2. Draw fixed tab navigation bar ON TOP
-            pygame.draw.rect(screen, DARK_GRAY, (0, 0, WIDTH, 116)) # Background for tabs
+            pygame.draw.rect(screen, DARK_GRAY, (0, 0, WIDTH, 86)) # Background for tabs
             tab1_col = CYAN if help_tab == 0 else LIGHT_GRAY
             tab2_col = CYAN if help_tab == 1 else LIGHT_GRAY
             
             # Tab highlight & outline
-            tab1_rect = pygame.Rect(WIDTH//2 - 210, 60, 200, 50)
-            tab2_rect = pygame.Rect(WIDTH//2 + 10, 60, 200, 50)
+            tab1_rect = pygame.Rect(WIDTH//2 - 205, 30, 200, 50)
+            tab2_rect = pygame.Rect(WIDTH//2 + 5, 30, 200, 50)
             
             if help_tab == 0:
                 pygame.draw.rect(screen, (40, 40, 60), tab1_rect, border_radius=10)
@@ -1274,9 +1278,9 @@ def main(args=None):
 
             t1 = fonts['small'].render('How to Play', True, tab1_col)
             t2 = fonts['small'].render('Network Setup', True, tab2_col)
-            screen.blit(t1, (WIDTH//2 - 200 + (200 - t1.get_width())//2, 70))
-            screen.blit(t2, (WIDTH//2 + 20 + (200 - t2.get_width())//2, 70))
-            pygame.draw.line(screen, LIGHT_GRAY, (0, 115), (WIDTH, 115), 1)
+            screen.blit(t1, (WIDTH//2 - 105 - t1.get_width()//2, 40))
+            screen.blit(t2, (WIDTH//2 + 105 - t2.get_width()//2, 40))
+            pygame.draw.line(screen, LIGHT_GRAY, (0, 85), (WIDTH, 85), 1)
             
             # Draw back button last so it's on top
             help_back_btn.draw(screen, fonts['small'])
