@@ -8,6 +8,8 @@ import random
 import numpy as np
 import time
 import socket
+import subprocess
+import re
 from pong_game.sound_gen import load_sounds, start_bgm, start_home_bgm, stop_bgm, _SOUND_CACHE
 from pong_game import settings as settings_mod
 
@@ -203,6 +205,11 @@ def draw_card(screen, y, h):
     return card_rect
 
 def draw_bg(screen, settings_dict):
+    is_high_contrast = settings_dict.get('accessibility', {}).get('high_contrast', False)
+    if is_high_contrast:
+        screen.fill(BLACK)
+        return
+
     if settings_dict.get('display', {}).get('court', True):
         court_color = (10, 80, 40) if not settings_dict.get('accessibility', {}).get('colorblind', False) else (10, 40, 80)
         screen.fill(court_color)
@@ -291,40 +298,40 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict, clock=
             p.draw(screen)
         particles[:] = [p for p in particles if p.life > 0]
 
-    if settings_dict.get('accessibility', {}).get('high_contrast', False):
-        p1_color = WHITE
-        p2_color = WHITE
-    else:
-        p1_color = GREEN
-        p2_color = RED
+    is_high_contrast = settings_dict.get('accessibility', {}).get('high_contrast', False)
+    p1_color = WHITE if is_high_contrast else GREEN
+    p2_color = WHITE if is_high_contrast else RED
+    score_col1 = WHITE if is_high_contrast else GREEN
+    score_col2 = WHITE if is_high_contrast else RED
+    text_col = WHITE if is_high_contrast else YELLOW
 
-    pygame.draw.rect(screen, (0, 100, 50),
+    pygame.draw.rect(screen, (0, 100, 50) if not is_high_contrast else (0, 0, 0),
         (LEFT_MARGIN-2, int(node.paddle1_y)-PADDLE_H//2-2, PADDLE_W+4, PADDLE_H+4),
         border_radius=8)
     pygame.draw.rect(screen, p1_color,
         (LEFT_MARGIN, int(node.paddle1_y)-PADDLE_H//2, PADDLE_W, PADDLE_H),
         border_radius=6)
 
-    pygame.draw.rect(screen, (100, 20, 20),
+    pygame.draw.rect(screen, (100, 20, 20) if not is_high_contrast else (0, 0, 0),
         (WIDTH-LEFT_MARGIN-PADDLE_W-2, int(node.paddle2_y)-PADDLE_H//2-2,
          PADDLE_W+4, PADDLE_H+4), border_radius=8)
     pygame.draw.rect(screen, p2_color,
         (WIDTH-LEFT_MARGIN-PADDLE_W, int(node.paddle2_y)-PADDLE_H//2,
          PADDLE_W, PADDLE_H), border_radius=6)
 
-    ball_col = WHITE if settings_dict.get('accessibility', {}).get('high_contrast', False) else CYAN
+    ball_col = WHITE
     pygame.draw.circle(screen, ball_col,
         (int(node.ball_x), int(node.ball_y)), BALL_SIZE)
-    pygame.draw.circle(screen, WHITE,
+    pygame.draw.circle(screen, BLACK if is_high_contrast else WHITE,
         (int(node.ball_x), int(node.ball_y)), BALL_SIZE-4)
 
-    s1 = fonts['big'].render(str(node.score1), True, GREEN)
-    s2 = fonts['big'].render(str(node.score2), True, RED)
+    s1 = fonts['big'].render(str(node.score1), True, score_col1)
+    s2 = fonts['big'].render(str(node.score2), True, score_col2)
     screen.blit(s1, (WIDTH//2 - 80, 15))
     screen.blit(s2, (WIDTH//2 + 45, 15))
 
     spd = fonts['tiny'].render(
-        f'Speed: {node.speed_mult:.1f}x', True, YELLOW)
+        f'Speed: {node.speed_mult:.1f}x', True, text_col)
     screen.blit(spd, (WIDTH//2 - spd.get_width()//2, 75))
 
     # Show network role if in network mode
@@ -381,10 +388,20 @@ def draw_network(screen, fonts, host_btn, join_btn, back_btn_local):
     screen.blit(sub, (WIDTH//2 - sub.get_width()//2, 62))
 
     # IP Address
-    try:
-        host_ip = socket.gethostbyname(socket.gethostname())
-    except:
-        host_ip = "Run ipconfig in PowerShell"
+    def get_windows_ip():
+        try:
+            # Run Windows ipconfig to get the real Wi-Fi adapter IP
+            cmd = "/mnt/c/Windows/System32/ipconfig.exe"
+            output = subprocess.check_output(cmd, shell=True).decode('utf-8')
+            import re
+            match = re.search(r'Wireless LAN adapter Wi-Fi 3:.*?IPv4 Address.*?:\s+([0-9.]+)', output, re.DOTALL)
+            if match:
+                return match.group(1)
+        except Exception:
+            pass
+        return socket.gethostbyname(socket.gethostname())
+
+    host_ip = get_windows_ip()
 
     ip_label = fonts['small'].render('Your IP Address:', True, WHITE)
     screen.blit(ip_label, (WIDTH//2 - ip_label.get_width()//2, 120))
