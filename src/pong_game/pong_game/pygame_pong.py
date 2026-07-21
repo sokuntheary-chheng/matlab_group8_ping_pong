@@ -122,6 +122,60 @@ def try_copy_to_clipboard(text):
 
     return False
 
+
+def try_paste_from_clipboard():
+    """Attempt to paste text from the system clipboard.
+    Returns the clipboard text or None if unavailable.
+    """
+    # 1) pyperclip if available
+    try:
+        import pyperclip
+        try:
+            return pyperclip.paste()
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    # 2) tkinter fallback
+    try:
+        import tkinter as tk
+        root = tk.Tk()
+        root.withdraw()
+        text = root.clipboard_get()
+        root.destroy()
+        return text
+    except Exception:
+        pass
+
+    # 3) Windows PowerShell clipboard via WSL
+    powershell_paths = [
+        "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+        "/mnt/c/Windows/System32/powershell.exe",
+    ]
+    for pwsh in powershell_paths:
+        try:
+            if os.path.exists(pwsh):
+                out = subprocess.check_output([pwsh, "-NoProfile", "-Command", "Get-Clipboard"], stderr=subprocess.DEVNULL)
+                return out.decode(errors="ignore").replace("\r\n", "\n")
+        except Exception:
+            pass
+
+    # 4) Linux clipboard utilities
+    try:
+        out = subprocess.check_output(["xclip", "-selection", "clipboard", "-o"], stderr=subprocess.DEVNULL)
+        return out.decode(errors="ignore")
+    except Exception:
+        pass
+
+    try:
+        out = subprocess.check_output(["xsel", "--clipboard", "--output"], stderr=subprocess.DEVNULL)
+        return out.decode(errors="ignore")
+    except Exception:
+        pass
+
+    return None
+
 # Screen
 WIDTH, HEIGHT = 1280, 720
 FPS = 60
@@ -722,7 +776,7 @@ def draw_network_join(screen, fonts, input_text, input_active, error_msg, connec
     screen.blit(txt, (input_box.centerx - txt.get_width()//2, input_box.centery - txt.get_height()//2))
 
     # Cursor
-    if input_active:
+    if input_active and (pygame.time.get_ticks() // 500) % 2 == 0:
         cursor_x = input_box.x + 10 + fonts['medium'].size(input_text)[0]
         pygame.draw.line(screen, CYAN, (cursor_x, input_box.y + 8), (cursor_x, input_box.y + 52), 2)
 
@@ -1423,6 +1477,13 @@ def main(args=None):
                    client_connection_status = 'ready'
                    state = 'network'
                elif event.type == pygame.KEYDOWN:
+                   if client_input_active and event.key == pygame.K_v and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                       paste_text = try_paste_from_clipboard()
+                       if paste_text:
+                           # Keep only printable characters and strip whitespace
+                           paste_text = ''.join(ch for ch in paste_text if ch.isprintable()).strip()
+                           client_input_text += paste_text
+                       continue
                    if event.key == pygame.K_RETURN:
                        if client_input_text.strip():
                            try: sounds['click'].play()
@@ -1447,7 +1508,7 @@ def main(args=None):
                        state = 'network'
                    elif event.key == pygame.K_BACKSPACE:
                        client_input_text = client_input_text[:-1]
-                   elif event.unicode.isprintable():
+                   elif client_input_active and event.unicode.isprintable():
                        client_input_text += event.unicode
                elif event.type == pygame.MOUSEBUTTONDOWN:
                    if input_box.collidepoint(event.pos):
