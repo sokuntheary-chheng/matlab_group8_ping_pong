@@ -1167,41 +1167,41 @@ def main(args=None):
             # 1. Draw scrollable content first
             if help_tab == 0:
                 # ── SECTION 1: CONTROLS ──
-                # Card height: Header (60) + 3 lines (25*3=75) + padding = 145
-                draw_card(screen, 125 - scroll_offset, 145)
+                # Tab bar ends at 80. Gap = 15. Start = 95.
+                draw_card(screen, 95 - scroll_offset, 145)
                 sec1 = fonts['small'].render('CONTROLS', True, YELLOW)
-                screen.blit(sec1, (80, 140 - scroll_offset))
-                pygame.draw.line(screen, YELLOW, (80, 170 - scroll_offset), (WIDTH - 80, 170 - scroll_offset), 1)
+                screen.blit(sec1, (80, 110 - scroll_offset))
+                pygame.draw.line(screen, YELLOW, (80, 140 - scroll_offset), (WIDTH - 80, 140 - scroll_offset), 1)
 
                 # Left sub-column - Player 1
                 p1_title = fonts['small'].render('Player 1 (Left)', True, GREEN)
-                screen.blit(p1_title, (80, 185 - scroll_offset))
+                screen.blit(p1_title, (80, 155 - scroll_offset))
                 p1_lines = ['W → Move Up', 'S → Move Down']
-                y_p1 = 215 - scroll_offset
+                y_p1 = 185 - scroll_offset
                 for ln in p1_lines:
                     t = fonts['tiny'].render(ln, True, WHITE)
                     screen.blit(t, (80, y_p1))
                     y_p1 += 25
 
                 # Vertical divider
-                pygame.draw.line(screen, LIGHT_GRAY, (WIDTH//2, 185 - scroll_offset), (WIDTH//2, 260 - scroll_offset), 1)
+                pygame.draw.line(screen, LIGHT_GRAY, (WIDTH//2, 155 - scroll_offset), (WIDTH//2, 230 - scroll_offset), 1)
 
                 # Right sub-column - Player 2 / AI
                 p2_title = fonts['small'].render('Player 2 / AI (Right)', True, RED)
-                screen.blit(p2_title, (WIDTH//2 + 20, 185 - scroll_offset))
+                screen.blit(p2_title, (WIDTH//2 + 20, 155 - scroll_offset))
                 p2_lines = ['↑ → Move Up', '↓ → Move Down']
-                y_p2 = 215 - scroll_offset
+                y_p2 = 185 - scroll_offset
                 for ln in p2_lines:
                     t = fonts['tiny'].render(ln, True, WHITE)
                     screen.blit(t, (WIDTH//2 + 20, y_p2))
                     y_p2 += 25
                 
                 # ── SECTION 2: GAME RULES ──
-                # Spacing: Previous card ends at 125+145 = 270. Gap = 15. Start = 285.
-                draw_card(screen, 285 - scroll_offset, 230)
+                # Spacing: Previous card ends at 95+145 = 240. Gap = 15. Start = 255.
+                draw_card(screen, 255 - scroll_offset, 230)
                 sec2 = fonts['small'].render('GAME RULES', True, YELLOW)
-                screen.blit(sec2, (80, 300 - scroll_offset))
-                pygame.draw.line(screen, YELLOW, (80, 330 - scroll_offset), (WIDTH - 80, 330 - scroll_offset), 1)
+                screen.blit(sec2, (80, 270 - scroll_offset))
+                pygame.draw.line(screen, YELLOW, (80, 300 - scroll_offset), (WIDTH - 80, 300 - scroll_offset), 1)
 
                 win_score = settings.get('gameplay', {}).get('winning_score', 5)
                 rules = [
@@ -1210,21 +1210,21 @@ def main(args=None):
                     'After each point a 3-second countdown restarts the ball',
                     'Hit ball near paddle edge for sharper angle shots',
                 ]
-                y_rules = 350 - scroll_offset
+                y_rules = 320 - scroll_offset
                 for rule in rules:
                     bullet = fonts['tiny'].render(f'•  {rule}', True, WHITE)
                     screen.blit(bullet, (80, y_rules))
                     y_rules += 40
 
                 # ── SECTION 3: SHORTCUTS ──
-                # Spacing: Previous card ends at 285+230 = 515. Gap = 15. Start = 530.
-                draw_card(screen, 530 - scroll_offset, 150)
+                # Spacing: Previous card ends at 255+230 = 485. Gap = 15. Start = 500.
+                draw_card(screen, 500 - scroll_offset, 150)
                 sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
-                screen.blit(sec3, (80, 545 - scroll_offset))
-                pygame.draw.line(screen, YELLOW, (80, 575 - scroll_offset), (WIDTH - 80, 575 - scroll_offset), 1)
+                screen.blit(sec3, (80, 515 - scroll_offset))
+                pygame.draw.line(screen, YELLOW, (80, 545 - scroll_offset), (WIDTH - 80, 545 - scroll_offset), 1)
 
                 shortcuts = [('ESC', 'Return to Home screen'), ('R', 'Restart current game')]
-                y_s = 595 - scroll_offset
+                y_s = 565 - scroll_offset
                 for key, desc in shortcuts:
                     key_box = pygame.Rect(80, y_s - 5, 50, 30)
                     pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=6)
@@ -1236,7 +1236,8 @@ def main(args=None):
                     y_s += 40
             else:
                 # Network setup guide
-                y = 125 - scroll_offset
+                # Tab bar ends at 80. Gap = 15. Start = 95.
+                y = 95 - scroll_offset
                 def draw_step(header, lines, y_pos):
                     h = 60 + len(lines) * 25 + 10
                     draw_card(screen, y_pos, h)
