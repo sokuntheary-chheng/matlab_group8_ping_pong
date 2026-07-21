@@ -1214,7 +1214,7 @@ def main(args=None):
                     y_rules += 40
 
                 # ── SECTION 3: SHORTCUTS ──
-                draw_card(screen, 565 - scroll_offset, 130)
+                draw_card(screen, 565 - scroll_offset, 150)
                 sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
                 screen.blit(sec3, (80, 580 - scroll_offset))
                 pygame.draw.line(screen, YELLOW, (80, 610 - scroll_offset), (WIDTH - 80, 610 - scroll_offset), 1)
