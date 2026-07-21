@@ -1214,13 +1214,13 @@ def main(args=None):
                     y_rules += 40
 
                 # ── SECTION 3: SHORTCUTS ──
-                draw_card(screen, 565 - scroll_offset, 110)
+                draw_card(screen, 565 - scroll_offset, 130)
                 sec3 = fonts['small'].render('KEYBOARD SHORTCUTS', True, YELLOW)
-                screen.blit(sec3, (80, 595 - scroll_offset))
-                pygame.draw.line(screen, YELLOW, (80, 580 - scroll_offset), (WIDTH - 80, 585 - scroll_offset), 1)
+                screen.blit(sec3, (80, 580 - scroll_offset))
+                pygame.draw.line(screen, YELLOW, (80, 610 - scroll_offset), (WIDTH - 80, 610 - scroll_offset), 1)
 
                 shortcuts = [('ESC', 'Return to Home screen'), ('R', 'Restart current game')]
-                y_s = 595 - scroll_offset
+                y_s = 630 - scroll_offset
                 for key, desc in shortcuts:
                     key_box = pygame.Rect(80, y_s - 5, 50, 30)
                     pygame.draw.rect(screen, (50, 50, 80), key_box, border_radius=6)
