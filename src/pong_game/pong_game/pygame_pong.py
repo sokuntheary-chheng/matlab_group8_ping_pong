@@ -10,8 +10,117 @@ import time
 import socket
 import subprocess
 import re
+import os
 from pong_game.sound_gen import load_sounds, start_bgm, start_home_bgm, stop_bgm, _SOUND_CACHE
 from pong_game import settings as settings_mod
+
+# Helper: detect local IP in a robust way
+def get_local_ip():
+    """Return the most likely local IPv4 address reachable by LAN peers.
+
+    Strategy:
+    1) UDP socket trick to determine outbound interface IP (no packets sent).
+    2) If that fails, try platform commands (ipconfig / ip / ifconfig) with tolerant parsing.
+    3) Fallback to socket.gethostbyname(hostname) or 127.0.0.1.
+    """
+    # 1) UDP socket trick — works on most platforms including WSL
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+
+    # 2) Platform-specific parsing
+    try:
+        # Prefer ipconfig on Windows if available
+        if os.path.exists("/mnt/c/Windows/System32/ipconfig.exe"):
+            try:
+                cmd = "/mnt/c/Windows/System32/ipconfig.exe"
+                out = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode(errors="ignore")
+                m = re.search(r"IPv4[^\n:]*[:\s]\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})", out)
+                if m:
+                    ip = m.group(1)
+                    if not ip.startswith("127."):
+                        return ip
+            except Exception:
+                pass
+        # Try `ip addr` (Linux/WSL)
+        try:
+            out = subprocess.check_output(["ip", "addr"], stderr=subprocess.DEVNULL).decode(errors="ignore")
+            m = re.search(r"inet\s+([0-9]{1,3}(?:\.[0-9]{1,3}){3})/", out)
+            if m:
+                ip = m.group(1)
+                if not ip.startswith("127."):
+                    return ip
+        except Exception:
+            # Try ifconfig as a last resort
+            try:
+                out = subprocess.check_output(["ifconfig"], stderr=subprocess.DEVNULL).decode(errors="ignore")
+                m = re.search(r"inet\s+([0-9]{1,3}(?:\.[0-9]{1,3}){3})", out)
+                if m:
+                    ip = m.group(1)
+                    if not ip.startswith("127."):
+                        return ip
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 3) Fallback
+    try:
+        ip = socket.gethostbyname(socket.gethostname())
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+    return "127.0.0.1"
+
+
+def try_copy_to_clipboard(text):
+    """Attempt to copy text to the system clipboard using multiple strategies.
+    Returns True on success, False otherwise.
+    """
+    # 1) Windows clip.exe via WSL
+    try:
+        clip_path = "/mnt/c/Windows/System32/clip.exe"
+        if os.path.exists(clip_path):
+            try:
+                subprocess.run([clip_path], input=text.encode(), check=True)
+                return True
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 2) pyperclip if available
+    try:
+        import pyperclip
+        try:
+            pyperclip.copy(text)
+            return True
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    # 3) tkinter fallback (may fail in headless/WSL without X)
+    try:
+        import tkinter as tk
+        root = tk.Tk()
+        root.withdraw()
+        root.clipboard_clear()
+        root.clipboard_append(text)
+        root.update()
+        root.destroy()
+        return True
+    except Exception:
+        pass
+
+    return False
 
 # Screen
 WIDTH, HEIGHT = 1280, 720
@@ -104,6 +213,7 @@ class PongNode(Node):
         self._network_mode = False  # set True when in Across 2 PCs mode
         self._network_role = 'HOST'  # 'HOST' or 'CLIENT'
         self._network_host_ip = None  # IP address if CLIENT mode
+        self._client_last_seen = None  # timestamp of last paddle input from CLIENT (HOST uses this to detect partner)
 
         self.settings = settings_dict or {}
 
@@ -130,10 +240,18 @@ class PongNode(Node):
         self.paddle2_y   = float(HEIGHT // 2)
         self.score1      = 0
         self.score2      = 0
-        self.game_status = 1
         self.speed_mult  = 1.0
-        self.publish_score_event(0, 'start', '')
-        self.start_countdown(0)
+        # In network HOST mode, start in waiting state until a CLIENT connects
+        if self._network_mode and getattr(self, '_network_role', 'HOST') == 'HOST':
+            self.game_status = 0  # 0 = waiting for partner
+            self._client_last_seen = None
+            # publish a 'start' score event so clients can see the waiting state
+            self.publish_score_event(0, 'start', '')
+            # Do not start countdown until client contact
+        else:
+            self.game_status = 1
+            self.publish_score_event(0, 'start', '')
+            self.start_countdown(0)
 
     def start_countdown(self, scorer):
         self.countdown_active = True
@@ -189,13 +307,30 @@ class PongNode(Node):
         self.state_pub.publish(msg)
 
     def paddle_callback(self, msg):
-        """Receive paddle positions from keyboard_controller (network/Across 2 PCs mode)"""
-        if self._network_mode and self.game_status == 1 and not self.countdown_active:
+        """Receive paddle positions from keyboard_controller (network/Across 2 PCs mode).
+        Also used as a lightweight presence/handshake: HOST will mark client as seen and
+        start the game (countdown) once a CLIENT publishes its first paddle input.
+        """
+        # record last seen time for client presence detection
+        try:
+            self._client_last_seen = time.time()
+        except Exception:
+            self._client_last_seen = None
+
+        # Always update paddle2_y from incoming message so HOST can preview partner position
+        try:
             half = PADDLE_H // 2
             self.paddle2_y = float(
                 (HEIGHT // 2) + msg.paddle2_y * ((HEIGHT // 2 - half) / 2.25)
             )
             self.paddle2_y = max(half, min(self.paddle2_y, HEIGHT - half))
+        except Exception:
+            pass
+
+        # If running as HOST and currently waiting for a partner, start the game on first contact
+        if self._network_mode and getattr(self, '_network_role', 'HOST') == 'HOST' and self.game_status == 0:
+            self.game_status = 1
+            self.start_countdown(0)
 
 # ─── Drawing helpers ─────────────────────────────────────
 def draw_card(screen, y, h):
@@ -348,6 +483,14 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict, clock=
             f'FPS: {int(clock.get_fps())}', True, YELLOW)
         screen.blit(fps_surf, (10, 10))
 
+    # Host waiting overlay when in network HOST role and no client yet
+    if mode == 3 and hasattr(node, '_network_role') and getattr(node, '_network_role', 'HOST') == 'HOST' and node.game_status == 0:
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        screen.blit(overlay, (0, 0))
+        waiting_txt = fonts['medium'].render('Waiting for your partner to start...', True, YELLOW)
+        screen.blit(waiting_txt, (WIDTH//2 - waiting_txt.get_width()//2, HEIGHT//2 - 20))
+
     if node.countdown_active:
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 100))
@@ -374,7 +517,7 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict, clock=
 
     pygame.display.flip()
 
-def draw_network(screen, fonts, host_btn, join_btn, back_btn_local):
+def draw_network(screen, fonts, host_btn, join_btn, back_btn_local, copy_btn=None, copy_msg='', copy_time=0.0):
     """Render network screen - event handling done in main loop"""
     screen.fill(DARK_GRAY)
     pygame.draw.rect(screen, BLUE, (0, 0, WIDTH, HEIGHT), 3)
@@ -388,20 +531,7 @@ def draw_network(screen, fonts, host_btn, join_btn, back_btn_local):
     screen.blit(sub, (WIDTH//2 - sub.get_width()//2, 62))
 
     # IP Address
-    def get_windows_ip():
-        try:
-            # Run Windows ipconfig to get the real Wi-Fi adapter IP
-            cmd = "/mnt/c/Windows/System32/ipconfig.exe"
-            output = subprocess.check_output(cmd, shell=True).decode('utf-8')
-            import re
-            match = re.search(r'Wireless LAN adapter Wi-Fi 3:.*?IPv4 Address.*?:\s+([0-9.]+)', output, re.DOTALL)
-            if match:
-                return match.group(1)
-        except Exception:
-            pass
-        return socket.gethostbyname(socket.gethostname())
-
-    host_ip = get_windows_ip()
+    host_ip = get_local_ip()
 
     ip_label = fonts['small'].render('Your IP Address:', True, WHITE)
     screen.blit(ip_label, (WIDTH//2 - ip_label.get_width()//2, 120))
@@ -418,6 +548,15 @@ def draw_network(screen, fonts, host_btn, join_btn, back_btn_local):
     # Draw buttons
     host_btn.draw(screen, fonts['small'])
     join_btn.draw(screen, fonts['small'])
+    back_btn_local.draw(screen, fonts['small'])
+    if copy_btn:
+        copy_btn.draw(screen, fonts['small'])
+
+    # Temporary copy feedback
+    if copy_msg and (time.time() - copy_time) < 2.5:
+        msg_surf = fonts['tiny'].render(copy_msg, True, GREEN if 'cop' in copy_msg.lower() else RED)
+        screen.blit(msg_surf, (WIDTH//2 - msg_surf.get_width()//2, 220))
+
     back_btn_local.draw(screen, fonts['small'])
 
     # Bottom hints
@@ -960,11 +1099,16 @@ def main(args=None):
     client_error_msg = ''
     client_connection_status = 'ready'
 
+    # Copy feedback
+    network_copy_msg = ''
+    network_copy_time = 0.0
+
     help_btn     = Button(WIDTH - 220, 20, 90, 44, 'Help', (30, 30, 40), (60, 60, 80))
     settings_btn = Button(WIDTH - 120, 20, 100, 44, 'Settings', (30, 30, 40), (60, 60, 80))
 
     # Network buttons (created once, reused in loop)
     host_btn = Button(WIDTH//2 - 330, 280, 300, 60, '🎮  Start as HOST', (20, 100, 20), (40, 150, 40))
+    copy_btn = Button(WIDTH//2 + 180, 150, 140, 50, 'Copy IP', (20,70,110), (40,110,180))
     join_btn = Button(WIDTH//2 + 30, 280, 300, 60, '🔗  Join as CLIENT', (20, 70, 110), (40, 110, 180))
     back_btn_network = Button(WIDTH//2 - 150, 380, 300, 60, 'Back to Home', (70, 20, 20), (130, 40, 40))
     
@@ -1085,6 +1229,16 @@ def main(args=None):
                    try: sounds['click'].play()
                    except: pass
                    state = 'network_join'
+               if copy_btn.is_clicked(event):
+                   try: sounds['click'].play()
+                   except: pass
+                   host_ip = get_local_ip()
+                   ok = try_copy_to_clipboard(host_ip)
+                   if ok:
+                       network_copy_msg = 'IP copied to clipboard'
+                   else:
+                       network_copy_msg = 'Copy failed — please copy manually'
+                   network_copy_time = time.time()
                if back_btn_network.is_clicked(event):
                    try: sounds['click'].play()
                    except: pass
@@ -1315,7 +1469,7 @@ def main(args=None):
             draw_game(screen, node, fonts, mode, particles, trail, settings, clock)
 
         elif state == 'network':
-            draw_network(screen, fonts, host_btn, join_btn, back_btn_network)
+            draw_network(screen, fonts, host_btn, join_btn, back_btn_network, copy_btn, network_copy_msg, network_copy_time)
 
         elif state == 'network_join':
             input_box = draw_network_join(
