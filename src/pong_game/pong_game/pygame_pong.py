@@ -690,12 +690,8 @@ def draw_network(screen, fonts, host_btn, join_btn, back_btn_local, copy_btn=Non
     pygame.draw.rect(screen, BLUE, (0, 0, WIDTH, HEIGHT), 3)
 
     # Title
-    title = fonts['medium'].render('Network Multiplayer — Across 2 PCs', True, CYAN)
-    screen.blit(title, (WIDTH//2 - title.get_width()//2, 18))
-
-    # Subtitle
-    sub = fonts['tiny'].render('Both PCs must be on the same WiFi or hotspot', True, YELLOW)
-    screen.blit(sub, (WIDTH//2 - sub.get_width()//2, 62))
+    title = fonts['network_title'].render('Network Multiplayer — Across 2 PCs', True, CYAN)
+    screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
 
     # IP Address
     host_ip = get_local_ip()
@@ -1279,6 +1275,7 @@ def main(args=None):
         'title':  pygame.font.Font(None, 95),
         'big':    pygame.font.Font(None, 70),
         'medium': pygame.font.Font(None, 48),
+        'network_title': pygame.font.Font(None, 56),
         'small':  pygame.font.Font(None, 34),
         'tiny':   pygame.font.Font(None, 26),
     }
@@ -1303,8 +1300,8 @@ def main(args=None):
     back_btn_network = Button(WIDTH//2 - 150, 380, 300, 60, 'Back to Home', (70, 20, 20), (130, 40, 40))
     
     # Network join buttons
-    connect_btn = Button(WIDTH//2 - 330, 380, 300, 60, '✓  Connect', (20, 100, 20), (40, 150, 40))
-    back_btn_join = Button(WIDTH//2 + 30, 380, 300, 60, '✗  Back', (70, 20, 20), (130, 40, 40))
+    back_btn_join = Button(WIDTH//2 - 330, 380, 300, 60, '✗  Back', (70, 20, 20), (130, 40, 40))
+    connect_btn = Button(WIDTH//2 + 30, 380, 300, 60, '✓  Connect', (20, 100, 20), (40, 150, 40))
 
     home_buttons = [
         Button(WIDTH//2-220, 210, 440, 68, 'Single Player',  (20,70,20),  (40,130,40)),
