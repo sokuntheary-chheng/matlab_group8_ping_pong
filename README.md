@@ -255,7 +255,7 @@ ros2 run pong_game pygame_pong
 Both PCs must be on the **same WiFi** and have the same ROS_DOMAIN_ID (default: 0).
 
 #### Role Assignment
-- **HOST** = Player 1 on the **LEFT side** (authoritative ? controls game physics and state)
+- **HOST** = Player 1 on the **LEFT side** (controls game physics and state)
 - **CLIENT** = Player 2 on the **RIGHT side** (sends paddle input to HOST)
 
 #### Network Handshake & Synchronization

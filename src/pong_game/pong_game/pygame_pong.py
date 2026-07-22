@@ -709,10 +709,6 @@ def draw_network(screen, fonts, host_btn, join_btn, back_btn_local, copy_btn=Non
     ip_text = fonts['small'].render(host_ip, True, CYAN)
     screen.blit(ip_text, (ip_box.centerx - ip_text.get_width()//2, ip_box.centery - ip_text.get_height()//2))
     
-    # Selectable text field hint
-    select_hint = fonts['tiny'].render('(Click to select) or use Copy IP button below', True, LIGHT_GRAY)
-    screen.blit(select_hint, (WIDTH//2 - select_hint.get_width()//2, 205))
-
     share_label = fonts['tiny'].render('Share this IP with your partner', True, LIGHT_GRAY)
     screen.blit(share_label, (WIDTH//2 - share_label.get_width()//2, 225))
 
