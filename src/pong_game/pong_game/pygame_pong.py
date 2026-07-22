@@ -777,7 +777,11 @@ def draw_network_join(screen, fonts, input_text, input_active, error_msg, connec
 
     # Cursor
     if input_active and (pygame.time.get_ticks() // 500) % 2 == 0:
-        cursor_x = input_box.x + 10 + fonts['medium'].size(input_text)[0]
+        text_width = fonts['medium'].size(input_text)[0]
+        # Center position of the text
+        text_center_x = input_box.centerx - text_width // 2
+        # Cursor position: after the text, starting from center
+        cursor_x = text_center_x + text_width
         pygame.draw.line(screen, CYAN, (cursor_x, input_box.y + 8), (cursor_x, input_box.y + 52), 2)
 
     # Error message
