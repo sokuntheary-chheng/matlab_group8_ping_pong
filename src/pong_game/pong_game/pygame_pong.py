@@ -407,10 +407,14 @@ class PongNode(Node):
             self.ball_vx = float(msg.ball_vel_x)
             self.ball_vy = float(msg.ball_vel_y)
             self.paddle1_y = float(msg.paddle1_y)
-            self.paddle2_y = float(msg.paddle2_y)
             self.score1 = int(msg.score_player1)
             self.score2 = int(msg.score_player2)
             self.game_status = int(msg.game_status)
+
+            # Keep the client-side paddle position from local input so movement remains visible
+            # while still updating the ball and opponent paddle from the host.
+            if getattr(self, '_network_role', 'HOST') != 'CLIENT':
+                self.paddle2_y = float(msg.paddle2_y)
         except Exception:
             pass
 
@@ -695,8 +699,12 @@ def draw_network(screen, fonts, host_btn, join_btn, back_btn_local, copy_btn=Non
     pygame.draw.rect(screen, BLUE, (0, 0, WIDTH, HEIGHT), 3)
 
     # Title
-    title = fonts['network_title'].render('Network Multiplayer — Across 2 PCs', True, CYAN)
-    screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
+    title = fonts['medium'].render('Network Multiplayer — Across 2 PCs', True, CYAN)
+    screen.blit(title, (WIDTH//2 - title.get_width()//2, 18))
+
+    # Subtitle
+    sub = fonts['tiny'].render('Both PCs must be on the same WiFi or hotspot', True, YELLOW)
+    screen.blit(sub, (WIDTH//2 - sub.get_width()//2, 62))
 
     # IP Address
     host_ip = get_local_ip()
@@ -710,6 +718,10 @@ def draw_network(screen, fonts, host_btn, join_btn, back_btn_local, copy_btn=Non
     ip_text = fonts['small'].render(host_ip, True, CYAN)
     screen.blit(ip_text, (ip_box.centerx - ip_text.get_width()//2, ip_box.centery - ip_text.get_height()//2))
     
+    # Selectable text field hint
+    select_hint = fonts['tiny'].render('(Click to select) or use Copy IP button below', True, LIGHT_GRAY)
+    screen.blit(select_hint, (WIDTH//2 - select_hint.get_width()//2, 205))
+
     share_label = fonts['tiny'].render('Share this IP with your partner', True, LIGHT_GRAY)
     screen.blit(share_label, (WIDTH//2 - share_label.get_width()//2, 225))
 
@@ -1092,7 +1104,7 @@ def draw_settings(screen, fonts, settings_dict, clock):
         clock.tick(30)
 
 # ─── Game update ─────────────────────────────────────────
-def update_game(node, keys, mode, sounds, particles, trail, settings_dict, dt):
+def update_game(node, pressed_keys, mode, sounds, particles, trail, settings_dict, dt):
     if node.countdown_active:
         node.update_countdown(dt)
         return
@@ -1106,8 +1118,8 @@ def update_game(node, keys, mode, sounds, particles, trail, settings_dict, dt):
     norm_speed = paddle_speed / norm_to_pixel
 
     if mode == 3 and getattr(node, '_network_role', 'HOST') == 'CLIENT':
-        key_up = bool(keys[pygame.K_w] or keys[pygame.K_UP])
-        key_down = bool(keys[pygame.K_s] or keys[pygame.K_DOWN])
+        key_up = bool(pygame.K_w in pressed_keys or pygame.K_UP in pressed_keys)
+        key_down = bool(pygame.K_s in pressed_keys or pygame.K_DOWN in pressed_keys)
         node.my_paddle_y = update_client_paddle_position(
             node.my_paddle_y,
             key_up,
@@ -1125,16 +1137,16 @@ def update_game(node, keys, mode, sounds, particles, trail, settings_dict, dt):
         return
 
     # Player 1 always uses W/S
-    if keys[pygame.K_w]:
+    if pygame.K_w in pressed_keys:
         node.paddle1_y = max(node.paddle1_y - paddle_speed, PADDLE_H//2)
-    if keys[pygame.K_s]:
+    if pygame.K_s in pressed_keys:
         node.paddle1_y = min(node.paddle1_y + paddle_speed, HEIGHT - PADDLE_H//2)
 
     # Player 2: keyboard in local 2-player, AI in single player, ROS topic in network
     if mode == 2:
-        if keys[pygame.K_UP]:
+        if pygame.K_UP in pressed_keys:
             node.paddle2_y = max(node.paddle2_y - paddle_speed, PADDLE_H//2)
-        if keys[pygame.K_DOWN]:
+        if pygame.K_DOWN in pressed_keys:
             node.paddle2_y = min(node.paddle2_y + paddle_speed, HEIGHT - PADDLE_H//2)
     elif mode == 3:
         # Network mode
@@ -1285,7 +1297,6 @@ def main(args=None):
         'title':  pygame.font.Font(None, 95),
         'big':    pygame.font.Font(None, 70),
         'medium': pygame.font.Font(None, 48),
-        'network_title': pygame.font.Font(None, 56),
         'small':  pygame.font.Font(None, 34),
         'tiny':   pygame.font.Font(None, 26),
     }
@@ -1310,8 +1321,8 @@ def main(args=None):
     back_btn_network = Button(WIDTH//2 - 150, 380, 300, 60, 'Back to Home', (70, 20, 20), (130, 40, 40))
     
     # Network join buttons
-    back_btn_join = Button(WIDTH//2 - 330, 380, 300, 60, '✗  Back', (70, 20, 20), (130, 40, 40))
-    connect_btn = Button(WIDTH//2 + 30, 380, 300, 60, '✓  Connect', (20, 100, 20), (40, 150, 40))
+    connect_btn = Button(WIDTH//2 - 330, 380, 300, 60, '✓  Connect', (20, 100, 20), (40, 150, 40))
+    back_btn_join = Button(WIDTH//2 + 30, 380, 300, 60, '✗  Back', (70, 20, 20), (130, 40, 40))
 
     home_buttons = [
         Button(WIDTH//2-220, 210, 440, 68, 'Single Player',  (20,70,20),  (40,130,40)),
@@ -1327,6 +1338,7 @@ def main(args=None):
     trail     = []
     current_bgm = 'home'
     help_tab  = 0
+    pressed_keys = set()
 
     scroll_offset = 0
     
@@ -1402,6 +1414,7 @@ def main(args=None):
 
             elif state == 'game':
                 if event.type == pygame.KEYDOWN:
+                    pressed_keys.add(event.key)
                     if event.key == pygame.K_ESCAPE:
                         state = 'home'
                         particles.clear()
@@ -1410,6 +1423,8 @@ def main(args=None):
                         node.reset_game()
                         trail.clear()
                         particles.clear()
+                elif event.type == pygame.KEYUP:
+                    pressed_keys.discard(event.key)
 
             elif state == 'network':
                if host_btn.is_clicked(event):
@@ -1668,8 +1683,7 @@ def main(args=None):
             state = 'home'
 
         elif state == 'game':
-            keys = pygame.key.get_pressed()
-            update_game(node, keys, mode, sounds, particles, trail, settings, dt)
+            update_game(node, pressed_keys, mode, sounds, particles, trail, settings, dt)
             draw_game(screen, node, fonts, mode, particles, trail, settings, clock)
 
         elif state == 'network':
