@@ -110,11 +110,11 @@ class PongClient(Node):
             while True:
                 ch = os.read(fd, 1)
                 if ch == b'w':
-                    self.my_paddle_y = min(
-                        self.my_paddle_y + self.paddle_speed, self.limit)
-                elif ch == b's':
                     self.my_paddle_y = max(
                         self.my_paddle_y - self.paddle_speed, -self.limit)
+                elif ch == b's':
+                    self.my_paddle_y = min(
+                        self.my_paddle_y + self.paddle_speed, self.limit)
                 elif ch == b'q':
                     break
         finally:

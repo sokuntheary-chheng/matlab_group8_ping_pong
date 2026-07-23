@@ -433,13 +433,18 @@ class PongNode(Node):
         except Exception:
             pass
 
-        # Always update paddle2_y from incoming message so HOST can preview partner position
+        # Always update paddle2_y from incoming message so HOST can preview partner position.
+        # Clamp and smooth the incoming position so the host side stays responsive and stable.
         try:
             half = PADDLE_H // 2
-            self.paddle2_y = float(
-                (HEIGHT // 2) + msg.paddle2_y * ((HEIGHT // 2 - half) / 2.25)
-            )
-            self.paddle2_y = max(half, min(self.paddle2_y, HEIGHT - half))
+            incoming_y = float(msg.paddle2_y)
+            incoming_y = max(-2.25, min(incoming_y, 2.25))
+            target_y = float((HEIGHT // 2) + incoming_y * ((HEIGHT // 2 - half) / 2.25))
+            target_y = max(half, min(target_y, HEIGHT - half))
+            if self.paddle2_y is None:
+                self.paddle2_y = target_y
+            else:
+                self.paddle2_y = self.paddle2_y + (target_y - self.paddle2_y) * 0.45
         except Exception:
             pass
 
@@ -1109,10 +1114,15 @@ def update_game(node, keys, mode, sounds, particles, trail, settings_dict, dt):
     norm_speed = paddle_speed / norm_to_pixel
 
     if mode == 3 and getattr(node, '_network_role', 'HOST') == 'CLIENT':
-        if keys[pygame.K_w] or keys[pygame.K_UP]:
-            node.my_paddle_y = min(node.my_paddle_y + norm_speed, node.limit)
-        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            node.my_paddle_y = max(node.my_paddle_y - norm_speed, -node.limit)
+        key_up = bool(keys[pygame.K_w] or keys[pygame.K_UP])
+        key_down = bool(keys[pygame.K_s] or keys[pygame.K_DOWN])
+        node.my_paddle_y = update_client_paddle_position(
+            node.my_paddle_y,
+            key_up,
+            key_down,
+            norm_speed,
+            node.limit,
+        )
         node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * norm_to_pixel)
         node.paddle2_y = max(half, min(node.paddle2_y, HEIGHT - half))
         # CLIENT should not simulate game physics locally. It only sends paddle input and
