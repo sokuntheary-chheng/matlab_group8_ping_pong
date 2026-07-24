@@ -5,16 +5,33 @@ Subscribes to /pong/game_state and renders the game display.
 Also publishes paddle input via /pong/paddle_input.
 Run this on the Guest PC instead of keyboard_controller.
 """
-import rclpy
-from rclpy.node import Node
-from pong_msgs.msg import PongGameState, PongScore
 import pygame
 import threading
 import time
 
+try:
+    import rclpy
+    from rclpy.node import Node
+    from pong_msgs.msg import PongGameState, PongScore
+except Exception:  # pragma: no cover - exercised in minimal test environments
+    rclpy = None
+    Node = object
+    PongGameState = None
+    PongScore = None
+
+from pong_game import settings as settings_mod
+
+try:
+    from pong_game import pygame_pong as host_ui
+except Exception:  # pragma: no cover - fallback when ROS module is unavailable
+    host_ui = None
+
 # Screen
-WIDTH, HEIGHT = 1280, 720
+WIDTH, HEIGHT = (1280, 720)
 FPS = 60
+if host_ui is not None:
+    WIDTH, HEIGHT = host_ui.WIDTH, host_ui.HEIGHT
+    FPS = host_ui.FPS
 
 # Colors
 BLACK      = (0, 0, 0)
@@ -36,6 +53,8 @@ LEFT_MARGIN = 50
 
 class PongClient(Node):
     def __init__(self):
+        if Node is object:
+            raise RuntimeError('rclpy is required to run the pong client')
         super().__init__('pong_client')
 
         # Subscribe to game state from Host
@@ -93,60 +112,25 @@ class PongClient(Node):
         msg.paddle2_y = self.my_paddle_y
         self.pub_paddle.publish(msg)
 
-def draw_court(screen):
-    screen.fill((10, 80, 40))
-    pygame.draw.rect(screen, WHITE, (20, 20, WIDTH-40, HEIGHT-40), 6, border_radius=6)
-    dash_h, gap = 20, 18
-    x = WIDTH // 2
-    y = 30
-    while y < HEIGHT - 30:
-        pygame.draw.rect(screen, WHITE, (x-2, y, 4, dash_h))
-        y += dash_h + gap
+def draw_game(screen, node, fonts, particles=None, trail=None, settings_dict=None, clock=None):
+    """Render the client UI using the same host renderer for visual parity."""
+    if host_ui is not None:
+        host_ui.draw_game(
+            screen,
+            node,
+            fonts,
+            mode=3,
+            particles=particles if particles is not None else [],
+            trail=trail if trail is not None else [],
+            settings_dict=settings_dict if settings_dict is not None else {},
+            clock=clock,
+        )
+        return
 
-
-def draw_game(screen, node, fonts):
-    draw_court(screen)
-
-    # Paddles
-    pygame.draw.rect(screen, GREEN,
-        (LEFT_MARGIN, int(node.paddle1_y) - PADDLE_H//2, PADDLE_W, PADDLE_H),
-        border_radius=6)
-    pygame.draw.rect(screen, RED,
-        (WIDTH - LEFT_MARGIN - PADDLE_W, int(node.paddle2_y) - PADDLE_H//2,
-         PADDLE_W, PADDLE_H), border_radius=6)
-
-    # Ball
-    pygame.draw.circle(screen, CYAN,
-        (int(node.ball_x), int(node.ball_y)), BALL_SIZE)
-    pygame.draw.circle(screen, WHITE,
-        (int(node.ball_x), int(node.ball_y)), BALL_SIZE - 4)
-
-    # Score
-    s1 = fonts['big'].render(str(node.score1), True, GREEN)
-    s2 = fonts['big'].render(str(node.score2), True, RED)
-    screen.blit(s1, (WIDTH//2 - 80, 15))
-    screen.blit(s2, (WIDTH//2 + 45, 15))
-
-    # Status overlay
-    if node.game_status == 0:
-        txt = fonts['medium'].render('Waiting for Host...', True, YELLOW)
-        screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2 - 20))
-    elif node.game_status == 2:
-        txt = fonts['big'].render('PLAYER 1 WINS!', True, GREEN)
-        screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2 - 40))
-    elif node.game_status == 3:
-        txt = fonts['big'].render('PLAYER 2 WINS!', True, RED)
-        screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2 - 40))
-
-    # You are Player 2 label
-    p2_label = fonts['tiny'].render('YOU  (Player 2)', True, RED)
-    screen.blit(p2_label, (WIDTH - LEFT_MARGIN - PADDLE_W - p2_label.get_width() - 10,
-                            int(node.paddle2_y) - 20))
-
-    # Controls hint
-    hint = fonts['tiny'].render('W = Up   S = Down   Q = Quit', True, LIGHT_GRAY)
-    screen.blit(hint, (WIDTH//2 - hint.get_width()//2, HEIGHT - 30))
-
+    screen.fill(DARK_GRAY)
+    pygame.draw.rect(screen, WHITE, (20, 20, WIDTH - 40, HEIGHT - 40), 6, border_radius=6)
+    txt = fonts['medium'].render('Waiting for host renderer...', True, YELLOW)
+    screen.blit(txt, (WIDTH // 2 - txt.get_width() // 2, HEIGHT // 2 - 20))
     pygame.display.flip()
 
 
@@ -203,32 +187,33 @@ def main(args=None):
 
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption('ROS 2 Pong — Guest (Player 2)')
+    pygame.display.set_caption('ROS 2 Pong — Group 8')
     clock = pygame.time.Clock()
 
+    settings = settings_mod.load_settings()
     fonts = {
+        'title':  pygame.font.Font(None, 95),
         'big':    pygame.font.Font(None, 70),
         'medium': pygame.font.Font(None, 48),
         'small':  pygame.font.Font(None, 34),
         'tiny':   pygame.font.Font(None, 26),
     }
 
+    particles = []
+    trail = []
+
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-           elif event.type == pygame.KEYDOWN:
+            elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
-               else:
-                   running = handle_pygame_input(event, node)
+                else:
+                    running = handle_pygame_input(event, node)
 
-        if node.game_status == 1:
-            draw_game(screen, node, fonts)
-        else:
-            draw_waiting(screen, fonts)
-
+        draw_game(screen, node, fonts, particles, trail, settings, clock)
         clock.tick(FPS)
 
     pygame.quit()
