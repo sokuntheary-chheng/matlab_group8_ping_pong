@@ -110,8 +110,11 @@ class PongClient(Node):
             f'Score: {msg.score_player1} - {msg.score_player2}  [{msg.event_type}]')
 
     def publish_paddles(self):
+        # Publish normalized paddle input for Player 2 (paddle2_y).
+        # Also include paddle1_y (unused by client) to keep message fields consistent.
         msg = PongGameState()
-        msg.paddle2_y = self.my_paddle_y
+        msg.paddle1_y = 0.0
+        msg.paddle2_y = float(self.my_paddle_y)
         self.pub_paddle.publish(msg)
 
 def draw_game(screen, node, fonts, particles=None, trail=None, settings_dict=None, clock=None):
@@ -137,9 +140,27 @@ def draw_game(screen, node, fonts, particles=None, trail=None, settings_dict=Non
 
 
 def update_client_paddle_from_keys(node, pressed_keys):
-    """Synchronize client paddle movement with the host-side rendered paddle."""
-    key_up = pygame.K_w in pressed_keys
-    key_down = pygame.K_s in pressed_keys
+    """Synchronize client paddle movement with the host-side rendered paddle.
+
+    pressed_keys may be either:
+    - a set of key constants (e.g. {pygame.K_w}) maintained by the event loop, or
+    - the sequence returned by pygame.key.get_pressed() where indexes are key constants.
+    This helper accepts both to be robust across different calling code / tests.
+    """
+    def _is_down(collection, key):
+        try:
+            # Most common case: a set containing key ints
+            return key in collection
+        except Exception:
+            try:
+                # pygame.key.get_pressed() returns a sequence of bools
+                return bool(collection[key])
+            except Exception:
+                return False
+
+    key_up = _is_down(pressed_keys, pygame.K_w)
+    key_down = _is_down(pressed_keys, pygame.K_s)
+
     node.my_paddle_y = update_client_paddle_position(
         node.my_paddle_y,
         key_up,
@@ -147,6 +168,7 @@ def update_client_paddle_from_keys(node, pressed_keys):
         node.paddle_speed,
         node.limit,
     )
+
     half = PADDLE_H // 2
     node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * ((HEIGHT // 2 - half) / 2.25))
     node.paddle2_y = max(half, min(node.paddle2_y, HEIGHT - half))
