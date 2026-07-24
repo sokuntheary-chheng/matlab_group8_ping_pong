@@ -9,6 +9,8 @@ import pygame
 import threading
 import time
 
+from pong_game.network_controls import update_client_paddle_position
+
 try:
     import rclpy
     from rclpy.node import Node
@@ -134,17 +136,28 @@ def draw_game(screen, node, fonts, particles=None, trail=None, settings_dict=Non
     pygame.display.flip()
 
 
+def update_client_paddle_from_keys(node, pressed_keys):
+    """Synchronize client paddle movement with the host-side rendered paddle."""
+    key_up = pygame.K_w in pressed_keys
+    key_down = pygame.K_s in pressed_keys
+    node.my_paddle_y = update_client_paddle_position(
+        node.my_paddle_y,
+        key_up,
+        key_down,
+        node.paddle_speed,
+        node.limit,
+    )
+    half = PADDLE_H // 2
+    node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * ((HEIGHT // 2 - half) / 2.25))
+    node.paddle2_y = max(half, min(node.paddle2_y, HEIGHT - half))
+    return True
+
+
 def handle_pygame_input(event, node):
     """Handle keyboard input from pygame events."""
     if event.type == pygame.KEYDOWN:
-       if event.key == pygame.K_w:
-           node.my_paddle_y = min(
-               node.my_paddle_y + node.paddle_speed, node.limit)
-       elif event.key == pygame.K_s:
-           node.my_paddle_y = max(
-               node.my_paddle_y - node.paddle_speed, -node.limit)
-       elif event.key == pygame.K_q:
-           return False
+        if event.key == pygame.K_q:
+            return False
     return True
 
 
@@ -202,16 +215,24 @@ def main(args=None):
     particles = []
     trail = []
 
+    pressed_keys = set()
+
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
+                pressed_keys.add(event.key)
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 else:
                     running = handle_pygame_input(event, node)
+            elif event.type == pygame.KEYUP:
+                pressed_keys.discard(event.key)
+
+        if node.game_status == 1:
+            update_client_paddle_from_keys(node, pressed_keys)
 
         draw_game(screen, node, fonts, particles, trail, settings, clock)
         clock.tick(FPS)
