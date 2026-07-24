@@ -41,6 +41,16 @@ def settings_path():
     return os.path.expanduser('~/.pong_settings.json')
 
 
+def get_winning_score(settings_dict, fallback=5):
+    gameplay = settings_dict.get('gameplay', {}) if isinstance(settings_dict, dict) else {}
+    if not isinstance(gameplay, dict):
+        return int(fallback)
+    try:
+        return int(gameplay.get('winning_score', fallback))
+    except (TypeError, ValueError):
+        return int(fallback)
+
+
 def load_settings():
     path = settings_path()
     try:

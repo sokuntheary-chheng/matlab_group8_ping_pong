@@ -15,10 +15,4 @@ def generate_launch_description():
             name='pong_visualizer',
             output='screen'
         ),
-        Node(
-            package='pong_game',
-            executable='keyboard_controller',
-            name='keyboard_controller',
-            output='screen'
-        ),
     ])

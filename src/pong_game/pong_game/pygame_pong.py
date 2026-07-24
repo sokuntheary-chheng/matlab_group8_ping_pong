@@ -277,6 +277,7 @@ class PongNode(Node):
         self._last_paddle_sent = None   # timestamp when this node (if CLIENT) last published paddle input
         self._client_paddle_count = 0  # heartbeat counter: consecutive paddle messages from CLIENT (HOST uses to gate start)
         self._client_last_paddle_time = None  # timestamp of last received paddle input (used for heartbeat window)
+        self._network_partner_seen = False  # True once the HOST has seen a real partner message
 
         self.settings = settings_dict or {}
 
@@ -315,6 +316,7 @@ class PongNode(Node):
             self._client_last_seen = None
             self._client_paddle_count = 0  # reset heartbeat counter
             self._client_last_paddle_time = None  # reset heartbeat timer
+            self._network_partner_seen = False
             # Host will publish waiting state; clients will just wait for host state messages
             self.publish_score_event(0, 'start', '')
             # Do not start countdown until host starts the match (host will call start_countdown)
@@ -452,35 +454,18 @@ class PongNode(Node):
         except Exception:
             pass
 
-        # Heartbeat threshold: HOST requires N=3 consecutive paddle messages within 1 second
+        # Wait for an actual partner paddle message before the HOST starts the match.
         if self._network_mode and getattr(self, '_network_role', 'HOST') == 'HOST' and self.game_status == 0:
-            # Check if this message is within the heartbeat window (1 second)
-            if self._client_last_paddle_time is None or (now - self._client_last_paddle_time) < 1.0:
-                self._client_paddle_count += 1
-                self._client_last_paddle_time = now
-                try:
-                    self.get_logger().info(f'[Net] Heartbeat {self._client_paddle_count}/3 at {time.strftime("%H:%M:%S", time.localtime(now))}')
-                except Exception:
-                    pass
-            else:
-                # Message is outside the window, reset counter
-                self._client_paddle_count = 1
-                self._client_last_paddle_time = now
-                try:
-                    self.get_logger().info(f'[Net] Heartbeat window expired, resetting. Message at {time.strftime("%H:%M:%S", time.localtime(now))}')
-                except Exception:
-                    pass
-            
-            # Start countdown when threshold (N=3) is reached
-            if self._client_paddle_count >= 3:
-                try:
-                    self.get_logger().info('[Net] Heartbeat threshold reached (N=3) ? starting countdown')
-                except Exception:
-                    pass
-                self.game_status = 1
-                self.start_countdown(0)
-                self._client_paddle_count = 0  # reset for next game
-                self._client_last_paddle_time = None
+            self._network_partner_seen = True
+            self._client_last_seen = now
+            self._client_paddle_count = 0
+            self._client_last_paddle_time = None
+            try:
+                self.get_logger().info('[Net] Partner message received; starting countdown')
+            except Exception:
+                pass
+            self.game_status = 1
+            self.start_countdown(0)
 
 # ─── Drawing helpers ─────────────────────────────────────
 def draw_card(screen, y, h):
@@ -1105,6 +1090,23 @@ def draw_settings(screen, fonts, settings_dict, clock):
 
 # ─── Game update ─────────────────────────────────────────
 def update_game(node, pressed_keys, mode, sounds, particles, trail, settings_dict, dt):
+    if mode == 3 and getattr(node, '_network_role', 'HOST') == 'CLIENT':
+        key_up = bool(pygame.K_w in pressed_keys or pygame.K_UP in pressed_keys)
+        key_down = bool(pygame.K_s in pressed_keys or pygame.K_DOWN in pressed_keys)
+        node.my_paddle_y = update_client_paddle_position(
+            node.my_paddle_y,
+            key_up,
+            key_down,
+            0.35,
+            node.limit,
+        )
+        node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * ((HEIGHT // 2 - (PADDLE_H // 2)) / 2.25))
+        node.paddle2_y = max(PADDLE_H // 2, min(node.paddle2_y, HEIGHT - PADDLE_H // 2))
+        if node.countdown_active:
+            node.update_countdown(dt)
+            return
+        return
+
     if node.countdown_active:
         node.update_countdown(dt)
         return
@@ -1117,23 +1119,7 @@ def update_game(node, pressed_keys, mode, sounds, particles, trail, settings_dic
     norm_to_pixel = (HEIGHT // 2 - half) / 2.25
     norm_speed = paddle_speed / norm_to_pixel
 
-    if mode == 3 and getattr(node, '_network_role', 'HOST') == 'CLIENT':
-        key_up = bool(pygame.K_w in pressed_keys or pygame.K_UP in pressed_keys)
-        key_down = bool(pygame.K_s in pressed_keys or pygame.K_DOWN in pressed_keys)
-        node.my_paddle_y = update_client_paddle_position(
-            node.my_paddle_y,
-            key_up,
-            key_down,
-            norm_speed,
-            node.limit,
-        )
-        node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * norm_to_pixel)
-        node.paddle2_y = max(half, min(node.paddle2_y, HEIGHT - half))
-        # CLIENT should not simulate game physics locally. It only sends paddle input and
-        # renders authoritative state received from the HOST.
-        return
-
-    elif node.game_status != 1:
+    if node.game_status != 1:
         return
 
     # Player 1 always uses W/S
@@ -1233,7 +1219,7 @@ def update_game(node, pressed_keys, mode, sounds, particles, trail, settings_dic
         if settings_dict.get('display', {}).get('effects', True):
             for _ in range(15):
                 particles.append(Particle(LEFT_MARGIN, node.ball_y, RED))
-        target_win = settings_dict.get('gameplay', {}).get('winning_score', WIN_SCORE)
+        target_win = settings_mod.get_winning_score(settings_dict, WIN_SCORE)
         if node.score2 >= target_win:
             node.game_status = 3
             try: sounds['win'].play()
@@ -1258,7 +1244,7 @@ def update_game(node, pressed_keys, mode, sounds, particles, trail, settings_dic
         if settings_dict.get('display', {}).get('effects', True):
             for _ in range(15):
                 particles.append(Particle(WIDTH-LEFT_MARGIN, node.ball_y, GREEN))
-        target_win = settings_dict.get('gameplay', {}).get('winning_score', WIN_SCORE)
+        target_win = settings_mod.get_winning_score(settings_dict, WIN_SCORE)
         if node.score1 >= target_win:
             node.game_status = 2
             try: sounds['win'].play()

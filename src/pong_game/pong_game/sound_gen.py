@@ -1,25 +1,34 @@
-import numpy as np
-import pygame
+import os
 import tempfile
-import wave
 import threading
 import time
+import wave
 from pathlib import Path
+
+import numpy as np
+import pygame
 
 _SOUND_CACHE = {}
 _BGM_PATH = None
 _HOME_BGM_PATH = None
+_BGM_CHANNEL = None
+_BGM_SOUND = None
 _MIXER_LOCK = threading.Lock()
+_AUDIO_DEBUG = os.environ.get('PONG_AUDIO_DEBUG', '').lower() in ('1', 'true', 'yes')
+_LAST_AUDIO_DEBUG_LOG = 0.0
+_MIXER_CHANNELS = 32
 
 
-def _ensure_mixer(init_args=(44100, -16, 2, 2048)):
+def _ensure_mixer(init_args=(22050, -16, 2, 4096)):
     """Ensure pygame mixer is initialized robustly."""
     try:
-        if not pygame.mixer.get_init():
+        if pygame.mixer.get_init() is None:
             pygame.mixer.pre_init(*init_args)
             pygame.mixer.init()
+        pygame.mixer.set_num_channels(_MIXER_CHANNELS)
+        pygame.mixer.init() if pygame.mixer.get_init() is None else None
+        return True
     except Exception:
-        # attempt re-init with safer buffer
         try:
             pygame.mixer.quit()
         except Exception:
@@ -27,21 +36,58 @@ def _ensure_mixer(init_args=(44100, -16, 2, 2048)):
         try:
             pygame.mixer.pre_init(init_args[0], init_args[1], init_args[2], 2048)
             pygame.mixer.init()
+            pygame.mixer.set_num_channels(_MIXER_CHANNELS)
+            return True
         except Exception:
-            # last resort: give up silently; callers should guard
             return False
-    return True
+
+
+def log_mixer_status(force=False):
+    """Optionally log mixer and channel state at most once every 10 seconds."""
+    global _LAST_AUDIO_DEBUG_LOG
+    if not _AUDIO_DEBUG:
+        return
+    now = time.time()
+    if not force and now - _LAST_AUDIO_DEBUG_LOG < 10.0:
+        return
+    _LAST_AUDIO_DEBUG_LOG = now
+    try:
+        print(
+            '[Audio] mixer=%s channels=%d active=%s music_busy=%s' % (
+                pygame.mixer.get_init(),
+                pygame.mixer.get_num_channels(),
+                pygame.mixer.get_busy(),
+                pygame.mixer.music.get_busy()),
+            flush=True)
+    except Exception as exc:
+        print(f'[Audio] mixer diagnostic failed: {exc}', flush=True)
 
 # Sound Generation
-def beep(freq=440, dur=0.1, vol=0.3, rate=44100):
+def _write_wav_file(data, rate=22050, path=None):
+    if path is None:
+        tmp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+        path = tmp.name
+        tmp.close()
+    with wave.open(path, 'wb') as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(rate)
+        wf.writeframes(data)
+    return path
+
+
+def beep(freq=440, dur=0.1, vol=0.3, rate=22050):
     frames = int(dur * rate)
     t = np.linspace(0, dur, frames, False)
     wave_arr = np.sin(2 * np.pi * freq * t)
     fade = np.linspace(1.0, 0.0, frames)
     wave_arr = wave_arr * fade * vol
     arr = (wave_arr * 32767).astype(np.int16)
+    stereo = np.column_stack([arr, arr]).tobytes()
+    path = _write_wav_file(stereo, rate=rate)
+
     try:
-        return pygame.sndarray.make_sound(np.column_stack([arr, arr]))
+        return pygame.mixer.Sound(path)
     except Exception:
         return None
 
@@ -49,9 +95,6 @@ def beep(freq=440, dur=0.1, vol=0.3, rate=44100):
 def load_sounds(settings=None):
     """Generate and cache common sound effects. Returns dict of sounds."""
     _ensure_mixer()
-    cache = _SOUND_CACHE
-    if cache:
-        return cache
 
     sfx = {
         'paddle': beep(480, 0.08, 0.4),
@@ -60,7 +103,7 @@ def load_sounds(settings=None):
         'win':    beep(660, 0.6,  0.6),
         'click':  beep(550, 0.05, 0.3),
     }
-    # apply volume multipliers if provided
+
     try:
         mv = 1.0
         if settings:
@@ -68,7 +111,7 @@ def load_sounds(settings=None):
             sfx_vol = float(settings.get('audio', {}).get('sfx_volume', 0.8))
         else:
             sfx_vol = 0.8
-        for k, snd in sfx.items():
+        for _, snd in sfx.items():
             if snd:
                 try:
                     snd.set_volume(sfx_vol * mv)
@@ -77,8 +120,9 @@ def load_sounds(settings=None):
     except Exception:
         pass
 
-    cache.update(sfx)
-    return cache
+    _SOUND_CACHE.clear()
+    _SOUND_CACHE.update(sfx)
+    return _SOUND_CACHE
 
 
 def generate_game_bgm(rate=44100):
@@ -207,8 +251,25 @@ def generate_home_bgm(rate=44100):
     return _HOME_BGM_PATH
 
 
+def _play_looping_bgm(path, volume):
+    global _BGM_CHANNEL, _BGM_SOUND
+    try:
+        if _BGM_CHANNEL is None:
+            _BGM_CHANNEL = pygame.mixer.Channel(0)
+        if _BGM_CHANNEL is not None:
+            _BGM_CHANNEL.stop()
+            if path:
+                pygame.mixer.music.load(path)
+                pygame.mixer.music.set_volume(volume)
+                pygame.mixer.music.play(-1)
+                _BGM_SOUND = path
+    except Exception:
+        return None
+    return path
+
+
 def start_bgm(settings=None):
-    """Start background music with health checks and volume control."""
+    """Start looping game background music with volume control."""
     _ensure_mixer()
     try:
         bgm_file = generate_bgm()
@@ -216,40 +277,23 @@ def start_bgm(settings=None):
             return None
         with _MIXER_LOCK:
             try:
-                pygame.mixer.music.load(bgm_file)
                 vol = 0.35
                 if settings:
                     vol = float(settings.get('audio', {}).get('bgm_volume', vol))
                     if settings.get('audio', {}).get('mute', False):
                         vol = 0.0
                     vol = vol * float(settings.get('audio', {}).get('master_volume', 1.0))
-                pygame.mixer.music.set_volume(vol)
-                pygame.mixer.music.play(-1)
+                _play_looping_bgm(bgm_file, vol)
             except Exception:
                 # try re-init and load once
                 try:
                     pygame.mixer.quit()
                     _ensure_mixer()
-                    pygame.mixer.music.load(bgm_file)
-                    pygame.mixer.music.play(-1)
+                    _play_looping_bgm(bgm_file, 0.35)
                 except Exception:
                     return None
 
-        # start a background health-check thread
-        def _health():
-            while True:
-                time.sleep(10)
-                try:
-                    if not pygame.mixer.get_init():
-                        _ensure_mixer()
-                        with _MIXER_LOCK:
-                            pygame.mixer.music.load(bgm_file)
-                            pygame.mixer.music.play(-1)
-                except Exception:
-                    pass
-
-        t = threading.Thread(target=_health, daemon=True)
-        t.start()
+        log_mixer_status(force=True)
         return bgm_file
     except Exception:
         return None
@@ -257,7 +301,12 @@ def start_bgm(settings=None):
 
 def stop_bgm():
     try:
-        pygame.mixer.music.stop()
+        with _MIXER_LOCK:
+            if _BGM_CHANNEL is not None:
+                _BGM_CHANNEL.stop()
+            global _BGM_SOUND
+            _BGM_SOUND = None
+        log_mixer_status(force=True)
     except Exception:
         try:
             pygame.mixer.quit()
@@ -266,7 +315,7 @@ def stop_bgm():
 
 
 def start_home_bgm(settings=None):
-    """Start home screen background music with health checks and volume control."""
+    """Start looping home screen background music with volume control."""
     _ensure_mixer()
     try:
         bgm_file = generate_home_bgm()
@@ -274,40 +323,23 @@ def start_home_bgm(settings=None):
             return None
         with _MIXER_LOCK:
             try:
-                pygame.mixer.music.load(bgm_file)
                 vol = 0.25
                 if settings:
                     vol = float(settings.get('audio', {}).get('bgm_volume', vol))
                     if settings.get('audio', {}).get('mute', False):
                         vol = 0.0
                     vol = vol * float(settings.get('audio', {}).get('master_volume', 1.0))
-                pygame.mixer.music.set_volume(vol)
-                pygame.mixer.music.play(-1)
+                _play_looping_bgm(bgm_file, vol)
             except Exception:
                 # try re-init and load once
                 try:
                     pygame.mixer.quit()
                     _ensure_mixer()
-                    pygame.mixer.music.load(bgm_file)
-                    pygame.mixer.music.play(-1)
+                    _play_looping_bgm(bgm_file, 0.25)
                 except Exception:
                     return None
 
-        # start a background health-check thread
-        def _health():
-            while True:
-                time.sleep(10)
-                try:
-                    if not pygame.mixer.get_init():
-                        _ensure_mixer()
-                        with _MIXER_LOCK:
-                            pygame.mixer.music.load(bgm_file)
-                            pygame.mixer.music.play(-1)
-                except Exception:
-                    pass
-
-        t = threading.Thread(target=_health, daemon=True)
-        t.start()
+        log_mixer_status(force=True)
         return bgm_file
     except Exception:
         return None
