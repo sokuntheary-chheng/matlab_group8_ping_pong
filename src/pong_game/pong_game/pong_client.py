@@ -2,7 +2,7 @@
 """
 ROS 2 Pong Client — Guest / Player 2
 Subscribes to /pong/game_state and renders the game display.
-Also publishes paddle input via /pong/paddle_input.
+Sends paddle input via WebSocket to the server.
 Run this on the Guest PC instead of keyboard_controller.
 """
 import rclpy
@@ -15,6 +15,10 @@ import os
 import tty
 import termios
 import time
+import json
+import asyncio
+import websockets
+from typing import Optional
 
 # Screen
 WIDTH, HEIGHT = 1280, 720
@@ -39,7 +43,7 @@ LEFT_MARGIN = 50
 
 
 class PongClient(Node):
-    def __init__(self):
+    def __init__(self, server_url: str = "ws://localhost:8765"):
         super().__init__('pong_client')
 
         # Subscribe to game state from Host
@@ -52,7 +56,7 @@ class PongClient(Node):
             PongScore, '/pong/score_event',
             self.score_callback, 10)
 
-        # Publish paddle input to Host
+        # Optional: Still publish to ROS for backwards compatibility
         self.pub_paddle = self.create_publisher(
             PongGameState, '/pong/paddle_input', 10)
 
@@ -74,13 +78,25 @@ class PongClient(Node):
         self.paddle_speed = 0.3
         self.limit        = 2.25
 
+        # WebSocket connection
+        self.server_url = server_url
+        self.ws_connected = False
+        self.ws = None
+        self.loop = None
+
         # Keyboard thread
         self.kb_thread = threading.Thread(
             target=self.read_keyboard, daemon=True)
         self.kb_thread.start()
 
+        # WebSocket thread
+        self.ws_thread = threading.Thread(
+            target=self.run_websocket_client, daemon=True)
+        self.ws_thread.start()
+
         self.get_logger().info('Pong Client started! You are Player 2 (RIGHT paddle)')
         self.get_logger().info('Controls: W = Up  |  S = Down  |  Q = Quit')
+        self.get_logger().info(f'Connecting to WebSocket server at {server_url}...')
 
     def state_callback(self, msg):
         self.ball_x      = msg.ball_x
@@ -112,13 +128,70 @@ class PongClient(Node):
                 if ch == b'w':
                     self.my_paddle_y = max(
                         self.my_paddle_y - self.paddle_speed, -self.limit)
+                    self.send_paddle_command()
                 elif ch == b's':
                     self.my_paddle_y = min(
                         self.my_paddle_y + self.paddle_speed, self.limit)
+                    self.send_paddle_command()
                 elif ch == b'q':
                     break
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+    def send_paddle_command(self):
+        """Send paddle position to server via WebSocket"""
+        if self.ws_connected and self.ws:
+            command = {
+                "type": "paddle_move",
+                "player": 2,
+                "paddle_y": round(self.my_paddle_y, 6)
+            }
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self.ws.send(json.dumps(command)),
+                    self.loop)
+            except Exception as e:
+                self.get_logger().debug(f'Failed to send paddle command: {e}')
+
+    def run_websocket_client(self):
+        """Run the WebSocket client in its own event loop"""
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self.websocket_client_main())
+
+    async def websocket_client_main(self):
+        """Main WebSocket client coroutine"""
+        retry_count = 0
+        max_retries = 10
+        retry_delay = 2
+
+        while retry_count < max_retries:
+            try:
+                async with websockets.connect(self.server_url) as websocket:
+                    self.ws = websocket
+                    self.ws_connected = True
+                    self.get_logger().info(f'Connected to WebSocket server at {self.server_url}')
+                    retry_count = 0
+
+                    try:
+                        async for message in websocket:
+                            pass
+                    except websockets.exceptions.ConnectionClosed:
+                        self.get_logger().warning('WebSocket connection closed by server')
+                    finally:
+                        self.ws_connected = False
+                        self.ws = None
+
+            except Exception as e:
+                retry_count += 1
+                self.get_logger().warning(
+                    f'WebSocket connection attempt {retry_count}/{max_retries} failed: {e}')
+
+                if retry_count < max_retries:
+                    await asyncio.sleep(retry_delay)
+                else:
+                    self.get_logger().error('Max WebSocket connection retries reached')
+                    break
 
 
 def draw_court(screen):
@@ -209,7 +282,13 @@ def draw_waiting(screen, fonts):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = PongClient()
+    
+    # Get server URL from environment or command line
+    server_url = os.environ.get('PONG_SERVER_URL', "ws://localhost:8765")
+    if len(sys.argv) > 1:
+        server_url = sys.argv[1]
+    
+    node = PongClient(server_url=server_url)
 
     ros_thread = threading.Thread(
         target=rclpy.spin, args=(node,), daemon=True)

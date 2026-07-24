@@ -13,6 +13,7 @@ import re
 import os
 from pong_game.sound_gen import load_sounds, start_bgm, start_home_bgm, stop_bgm, _SOUND_CACHE
 from pong_game import settings as settings_mod
+from pong_game.websocket_server import PongWebSocketServer
 
 # Helper: detect local IP in a robust way
 def get_local_ip():
@@ -303,6 +304,20 @@ class PongNode(Node):
         self.countdown_time = 0.0
         self.countdown_max = 3.0
         self.last_scorer = 0  # 1 or 2
+
+        # WebSocket server initialization
+        self.ws_server = None
+        self.ws_thread = None
+        self.setup_websocket_server()
+
+    def setup_websocket_server(self):
+        """Initialize and start the WebSocket server"""
+        try:
+            self.ws_server = PongWebSocketServer(self, host="0.0.0.0", port=8765)
+            self.ws_thread = self.ws_server.run_in_thread()
+            self.get_logger().info('WebSocket server initialized')
+        except Exception as e:
+            self.get_logger().warning(f'Failed to initialize WebSocket server: {e}')
 
     def reset_game(self):
         self.paddle1_y   = float(HEIGHT // 2)

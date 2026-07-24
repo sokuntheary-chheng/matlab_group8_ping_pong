@@ -14,7 +14,7 @@ setup(
     ('share/' + package_name, ['package.xml']),
     ('share/' + package_name + '/launch', ['launch/pong.launch.py']),
 ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'websockets>=10.0'],
     zip_safe=True,
     maintainer='sparkling',
     maintainer_email='sparkling@example.com',
