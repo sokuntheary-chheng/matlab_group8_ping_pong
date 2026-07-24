@@ -10,10 +10,6 @@ from rclpy.node import Node
 from pong_msgs.msg import PongGameState, PongScore
 import pygame
 import threading
-import sys
-import os
-import tty
-import termios
 import time
 
 # Screen
@@ -74,11 +70,6 @@ class PongClient(Node):
         self.paddle_speed = 0.3
         self.limit        = 2.25
 
-        # Keyboard thread
-        self.kb_thread = threading.Thread(
-            target=self.read_keyboard, daemon=True)
-        self.kb_thread.start()
-
         self.get_logger().info('Pong Client started! You are Player 2 (RIGHT paddle)')
         self.get_logger().info('Controls: W = Up  |  S = Down  |  Q = Quit')
 
@@ -101,25 +92,6 @@ class PongClient(Node):
         msg = PongGameState()
         msg.paddle2_y = self.my_paddle_y
         self.pub_paddle.publish(msg)
-
-    def read_keyboard(self):
-        fd = sys.stdin.fileno()
-        old = termios.tcgetattr(fd)
-        try:
-            tty.setraw(fd)
-            while True:
-                ch = os.read(fd, 1)
-                if ch == b'w':
-                    self.my_paddle_y = max(
-                        self.my_paddle_y - self.paddle_speed, -self.limit)
-                elif ch == b's':
-                    self.my_paddle_y = min(
-                        self.my_paddle_y + self.paddle_speed, self.limit)
-                elif ch == b'q':
-                    break
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
-
 
 def draw_court(screen):
     screen.fill((10, 80, 40))
@@ -178,6 +150,20 @@ def draw_game(screen, node, fonts):
     pygame.display.flip()
 
 
+def handle_pygame_input(event, node):
+    """Handle keyboard input from pygame events."""
+    if event.type == pygame.KEYDOWN:
+       if event.key == pygame.K_w:
+           node.my_paddle_y = min(
+               node.my_paddle_y + node.paddle_speed, node.limit)
+       elif event.key == pygame.K_s:
+           node.my_paddle_y = max(
+               node.my_paddle_y - node.paddle_speed, -node.limit)
+       elif event.key == pygame.K_q:
+           return False
+    return True
+
+
 def draw_waiting(screen, fonts):
     screen.fill(DARK_GRAY)
     pygame.draw.rect(screen, BLUE, (0, 0, WIDTH, HEIGHT), 3)
@@ -232,9 +218,11 @@ def main(args=None):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            if event.type == pygame.KEYDOWN:
+           elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
+               else:
+                   running = handle_pygame_input(event, node)
 
         if node.game_status == 1:
             draw_game(screen, node, fonts)
