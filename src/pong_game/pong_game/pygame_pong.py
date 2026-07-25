@@ -272,6 +272,9 @@ class PongNode(Node):
         # Subscribe to game_state so CLIENT can render the authoritative host state
         self.state_sub = self.create_subscription(
             PongGameState, '/pong/game_state', self.state_callback, 10)
+        # Subscribe to score_event so CLIENT can trigger countdown on host score events
+        self.score_sub = self.create_subscription(
+            PongScore, '/pong/score_event', self.score_callback, 10)
         # Subscriber for network P2 paddle input
         self.paddle_sub = self.create_subscription(
             PongGameState, '/pong/paddle_input', self.paddle_callback, 10)
@@ -414,6 +417,8 @@ class PongNode(Node):
             return
 
         try:
+            self.host_connected = True
+            self.last_host_msg_time = time.time()
             self.ball_x = float(msg.ball_x)
             self.ball_y = float(msg.ball_y)
             self.ball_vx = float(msg.ball_vel_x)
@@ -421,7 +426,12 @@ class PongNode(Node):
             self.paddle1_y = float(msg.paddle1_y)
             self.score1 = int(msg.score_player1)
             self.score2 = int(msg.score_player2)
+            
+            prev_status = self.game_status
             self.game_status = int(msg.game_status)
+
+            if prev_status == 0 and self.game_status == 1 and not self.countdown_active:
+                self.start_countdown(0)
 
             # Keep the client-side paddle position from local input so movement remains visible
             # while still updating the ball and opponent paddle from the host.
@@ -429,6 +439,11 @@ class PongNode(Node):
                 self.paddle2_y = float(msg.paddle2_y)
         except Exception:
             pass
+
+    def score_callback(self, msg):
+        if getattr(self, '_network_mode', False) and getattr(self, '_network_role', 'HOST') == 'CLIENT':
+            if msg.event_type in ('start', 'score'):
+                self.start_countdown(msg.player_scored)
 
     def paddle_callback(self, msg):
         """Receive paddle positions from keyboard_controller (network/Across 2 PCs mode).

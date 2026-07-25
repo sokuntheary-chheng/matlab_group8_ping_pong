@@ -128,7 +128,11 @@ class PongClient(Node):
         self.paddle2_y   = msg.paddle2_y
         self.score1      = msg.score_player1
         self.score2      = msg.score_player2
+        
+        prev_status = self.game_status
         self.game_status = msg.game_status
+        if prev_status == 0 and self.game_status == 1 and not self.countdown_active:
+            self.start_countdown(0)
 
         # Update paddle speed dynamically based on ball velocity
         # Use same formula as HOST: paddle_speed = ball_speed * 0.88
@@ -147,6 +151,8 @@ class PongClient(Node):
     def score_callback(self, msg):
         self.get_logger().info(
             f'Score: {msg.score_player1} - {msg.score_player2}  [{msg.event_type}]')
+        if msg.event_type in ('start', 'score'):
+            self.start_countdown(msg.player_scored)
 
     def start_countdown(self, scorer):
         self.countdown_active = True
@@ -301,6 +307,9 @@ def main(args=None):
 
     running = True
     while running:
+        dt = clock.tick(FPS) / 1000.0
+        dt = max(0.001, min(dt, 0.05))
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -312,6 +321,9 @@ def main(args=None):
                     running = handle_pygame_input(event, node)
             elif event.type == pygame.KEYUP:
                 pressed_keys.discard(event.key)
+
+        if node.countdown_active:
+            node.update_countdown(dt)
 
         if node.game_status == 1:
             update_client_paddle_from_keys(node, pressed_keys)
