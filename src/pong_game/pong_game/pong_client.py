@@ -90,6 +90,13 @@ class PongClient(Node):
         self.my_paddle_y  = 0.0
         self.paddle_speed = 0.3
         self.limit        = 2.25
+        self.speed_mult   = 1.0
+
+        # Countdown timer state
+        self.countdown_active = False
+        self.countdown_time = 0.0
+        self.countdown_max = 3.0
+        self.last_scorer = 0
 
         self.get_logger().info('Pong Client started! You are Player 2 (RIGHT paddle)')
         self.get_logger().info('Controls: W = Up  |  S = Down  |  Q = Quit')
@@ -108,6 +115,21 @@ class PongClient(Node):
     def score_callback(self, msg):
         self.get_logger().info(
             f'Score: {msg.score_player1} - {msg.score_player2}  [{msg.event_type}]')
+
+    def start_countdown(self, scorer):
+        self.countdown_active = True
+        self.countdown_time = 0.0
+        self.last_scorer = scorer
+
+    def update_countdown(self, dt):
+        if not self.countdown_active:
+            return False
+
+        self.countdown_time += dt
+        if self.countdown_time >= self.countdown_max:
+            self.countdown_active = False
+            return True
+        return False
 
     def publish_paddles(self):
         # Publish normalized paddle input for Player 2 (paddle2_y).
