@@ -32,3 +32,13 @@ def test_client_key_input_updates_local_paddle_and_display():
     pong_client.update_client_paddle_from_keys(node, {pygame.K_s})
     assert node.my_paddle_y == 0.2
     assert node.paddle2_y > 360.0
+
+
+def test_client_arrow_keys_update_local_paddle():
+    node = types.SimpleNamespace(my_paddle_y=0.2, paddle_speed=0.3, limit=2.25, paddle2_y=0.0)
+    pong_client.update_client_paddle_from_keys(node, {pygame.K_UP})
+    assert node.my_paddle_y == -0.1
+
+    pong_client.update_client_paddle_from_keys(node, {pygame.K_DOWN})
+    assert node.my_paddle_y == 0.2
+

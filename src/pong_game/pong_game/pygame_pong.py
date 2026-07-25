@@ -303,7 +303,7 @@ class PongNode(Node):
         self.paddle2_y = float(HEIGHT // 2)
         self.score1    = 0
         self.score2    = 0
-        self.game_status = 1
+        self.game_status = 0
         self.speed_mult  = 1.0
 
         # Client-side normalized paddle (used when this GUI is a CLIENT)
@@ -323,19 +323,15 @@ class PongNode(Node):
         self.score1      = 0
         self.score2      = 0
         self.speed_mult  = 1.0
-        # Networked mode: both HOST and CLIENT should show waiting until the Host starts the match
-        if self._network_mode:
-            self.game_status = 0  # 0 = waiting for partner / waiting for host to start
-            self._client_last_seen = None
-            self._client_paddle_count = 0  # reset heartbeat counter
-            self._client_last_paddle_time = None  # reset heartbeat timer
-            self._network_partner_seen = False
-            # Host will publish waiting state; clients will just wait for host state messages
-            self.publish_score_event(0, 'start', '')
-            # Do not start countdown until host starts the match (host will call start_countdown)
+        # Networked mode: HOST starts match countdown on reset; CLIENT waits for HOST state
+        if self._network_mode and getattr(self, '_network_role', 'HOST') == 'CLIENT':
+            self.game_status = 0
         else:
-            # Local (non-network) behavior: start immediately
             self.game_status = 1
+            self._client_last_seen = time.time()
+            self._client_paddle_count = 0
+            self._client_last_paddle_time = None
+            self._network_partner_seen = True
             self.publish_score_event(0, 'start', '')
             self.start_countdown(0)
 
@@ -1221,10 +1217,6 @@ def update_game(node, pressed_keys, mode, sounds, particles, trail, settings_dic
             return
         return
 
-    if node.countdown_active:
-        node.update_countdown(dt)
-        return
-
     ball_speed = max(abs(node.ball_vx), abs(node.ball_vy), 1.0)
     paddle_speed = ball_speed * 0.88
     paddle_speed = min(paddle_speed, ball_speed * 0.95)
@@ -1233,39 +1225,44 @@ def update_game(node, pressed_keys, mode, sounds, particles, trail, settings_dic
     norm_to_pixel = (HEIGHT // 2 - half) / 2.25
     norm_speed = paddle_speed / norm_to_pixel
 
-    if node.game_status != 1:
+    if node.game_status == 1 or node.countdown_active:
+        # Player 1 uses W/S or UP/DOWN (on Host PC)
+        if pygame.K_w in pressed_keys or pygame.K_UP in pressed_keys:
+            node.paddle1_y = max(node.paddle1_y - paddle_speed, PADDLE_H//2)
+        if pygame.K_s in pressed_keys or pygame.K_DOWN in pressed_keys:
+            node.paddle1_y = min(node.paddle1_y + paddle_speed, HEIGHT - PADDLE_H//2)
+
+        # Player 2: keyboard in local 2-player, AI in single player, ROS topic in network
+        if mode == 2:
+            if pygame.K_UP in pressed_keys:
+                node.paddle2_y = max(node.paddle2_y - paddle_speed, PADDLE_H//2)
+            if pygame.K_DOWN in pressed_keys:
+                node.paddle2_y = min(node.paddle2_y + paddle_speed, HEIGHT - PADDLE_H//2)
+        elif mode == 3:
+            # Network mode
+            if getattr(node, '_network_role', 'HOST') == 'CLIENT':
+                # CLIENT: paddle already updated above; do not run authoritative physics here.
+                pass
+            else:
+                # HOST: paddle2 will be driven by incoming paddle_callback messages
+                pass
+        elif mode == 1:
+            # AI
+            target = node.ball_y + random.uniform(-15, 15)
+            difficulty = settings_dict.get('gameplay', {}).get('difficulty', 'Normal')
+            diff_mult = {'Easy': 0.6, 'Normal': 0.85, 'Hard': 0.98}.get(difficulty, 0.85)
+            ai_speed = min(paddle_speed * diff_mult, 20.0)
+            if node.paddle2_y < target - 5:
+                node.paddle2_y = min(node.paddle2_y + ai_speed, HEIGHT - PADDLE_H//2)
+            elif node.paddle2_y > target + 5:
+                node.paddle2_y = max(node.paddle2_y - ai_speed, PADDLE_H//2)
+
+    if node.countdown_active:
+        node.update_countdown(dt)
         return
 
-    # Player 1 always uses W/S
-    if pygame.K_w in pressed_keys:
-        node.paddle1_y = max(node.paddle1_y - paddle_speed, PADDLE_H//2)
-    if pygame.K_s in pressed_keys:
-        node.paddle1_y = min(node.paddle1_y + paddle_speed, HEIGHT - PADDLE_H//2)
-
-    # Player 2: keyboard in local 2-player, AI in single player, ROS topic in network
-    if mode == 2:
-        if pygame.K_UP in pressed_keys:
-            node.paddle2_y = max(node.paddle2_y - paddle_speed, PADDLE_H//2)
-        if pygame.K_DOWN in pressed_keys:
-            node.paddle2_y = min(node.paddle2_y + paddle_speed, HEIGHT - PADDLE_H//2)
-    elif mode == 3:
-        # Network mode
-        if getattr(node, '_network_role', 'HOST') == 'CLIENT':
-            # CLIENT: paddle already updated above; do not run authoritative physics here.
-            pass
-        else:
-            # HOST: paddle2 will be driven by incoming paddle_callback messages
-            pass
-    elif mode == 1:
-        # AI
-        target = node.ball_y + random.uniform(-15, 15)
-        difficulty = settings_dict.get('gameplay', {}).get('difficulty', 'Normal')
-        diff_mult = {'Easy': 0.6, 'Normal': 0.85, 'Hard': 0.98}.get(difficulty, 0.85)
-        ai_speed = min(paddle_speed * diff_mult, 20.0)
-        if node.paddle2_y < target - 5:
-            node.paddle2_y = min(node.paddle2_y + ai_speed, HEIGHT - PADDLE_H//2)
-        elif node.paddle2_y > target + 5:
-            node.paddle2_y = max(node.paddle2_y - ai_speed, PADDLE_H//2)
+    if node.game_status != 1:
+        return
 
     # Move ball
     node.ball_x += node.ball_vx

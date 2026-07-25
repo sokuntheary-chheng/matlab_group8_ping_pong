@@ -242,8 +242,8 @@ def update_client_paddle_from_keys(node, pressed_keys):
             except Exception:
                 return False
 
-    key_up = _is_down(pressed_keys, pygame.K_w)
-    key_down = _is_down(pressed_keys, pygame.K_s)
+    key_up = _is_down(pressed_keys, pygame.K_w) or _is_down(pressed_keys, pygame.K_UP)
+    key_down = _is_down(pressed_keys, pygame.K_s) or _is_down(pressed_keys, pygame.K_DOWN)
 
     # Convert pixel-based paddle_speed to normalized units
     # norm_to_pixel = (HEIGHT // 2 - PADDLE_H // 2) / 2.25
@@ -353,11 +353,11 @@ def main(args=None):
             elif event.type == pygame.KEYUP:
                 pressed_keys.discard(event.key)
 
+        if node.game_status == 1 or node.countdown_active:
+            update_client_paddle_from_keys(node, pressed_keys)
+
         if node.countdown_active:
             node.update_countdown(dt)
-
-        if node.game_status == 1:
-            update_client_paddle_from_keys(node, pressed_keys)
 
         draw_game(screen, node, fonts, particles, trail, settings, clock)
         clock.tick(FPS)
