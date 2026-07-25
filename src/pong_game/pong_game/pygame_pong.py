@@ -1091,17 +1091,35 @@ def draw_settings(screen, fonts, settings_dict, clock):
 # ─── Game update ─────────────────────────────────────────
 def update_game(node, pressed_keys, mode, sounds, particles, trail, settings_dict, dt):
     if mode == 3 and getattr(node, '_network_role', 'HOST') == 'CLIENT':
+        # Calculate dynamic paddle speed based on ball velocity (same as HOST)
+        ball_speed = max(abs(node.ball_vx), abs(node.ball_vy), 1.0)
+        paddle_speed = ball_speed * 0.88
+        paddle_speed = min(paddle_speed, ball_speed * 0.95)
+        paddle_speed = max(3.0, min(paddle_speed, 20.0))
+        
+        # Convert to normalized units
+        half = PADDLE_H // 2
+        norm_to_pixel = (HEIGHT // 2 - half) / 2.25
+        norm_speed = paddle_speed / norm_to_pixel
+        
         key_up = bool(pygame.K_w in pressed_keys or pygame.K_UP in pressed_keys)
         key_down = bool(pygame.K_s in pressed_keys or pygame.K_DOWN in pressed_keys)
         node.my_paddle_y = update_client_paddle_position(
             node.my_paddle_y,
             key_up,
             key_down,
-            0.35,
+            norm_speed,
             node.limit,
         )
         node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * ((HEIGHT // 2 - (PADDLE_H // 2)) / 2.25))
         node.paddle2_y = max(PADDLE_H // 2, min(node.paddle2_y, HEIGHT - PADDLE_H // 2))
+        
+        # Update speed_mult to track ball acceleration
+        if ball_speed > getattr(node, '_last_ball_speed', 1.0):
+            inc_pct = (ball_speed - getattr(node, '_last_ball_speed', 1.0)) / max(1.0, getattr(node, '_last_ball_speed', 1.0))
+            node.speed_mult = min(node.speed_mult + inc_pct, 5.0)
+        node._last_ball_speed = ball_speed
+        
         if node.countdown_active:
             node.update_countdown(dt)
             return

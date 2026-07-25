@@ -88,9 +88,10 @@ class PongClient(Node):
 
         # Local paddle control (normalized -2.25 to 2.25)
         self.my_paddle_y  = 0.0
-        self.paddle_speed = 0.3
+        self.paddle_speed = 0.3  # will be updated dynamically based on ball speed
         self.limit        = 2.25
         self.speed_mult   = 1.0
+        self._last_ball_speed = 1.0  # track previous ball speed to detect changes
 
         # Countdown timer state
         self.countdown_active = False
@@ -111,6 +112,20 @@ class PongClient(Node):
         self.score1      = msg.score_player1
         self.score2      = msg.score_player2
         self.game_status = msg.game_status
+
+        # Update paddle speed dynamically based on ball velocity
+        # Use same formula as HOST: paddle_speed = ball_speed * 0.88
+        ball_speed = max(abs(self.ball_vx), abs(self.ball_vy), 1.0)
+        self.paddle_speed = ball_speed * 0.88
+        self.paddle_speed = min(self.paddle_speed, ball_speed * 0.95)
+        self.paddle_speed = max(3.0, min(self.paddle_speed, 20.0))
+
+        # Update speed_mult to track ball acceleration
+        # Match HOST behavior: speed_mult increases each time ball is hit
+        if ball_speed > self._last_ball_speed:
+            inc_pct = (ball_speed - self._last_ball_speed) / max(1.0, self._last_ball_speed)
+            self.speed_mult = min(self.speed_mult + inc_pct, 5.0)
+        self._last_ball_speed = ball_speed
 
     def score_callback(self, msg):
         self.get_logger().info(
@@ -183,15 +198,20 @@ def update_client_paddle_from_keys(node, pressed_keys):
     key_up = _is_down(pressed_keys, pygame.K_w)
     key_down = _is_down(pressed_keys, pygame.K_s)
 
+    # Convert pixel-based paddle_speed to normalized units
+    # norm_to_pixel = (HEIGHT // 2 - PADDLE_H // 2) / 2.25
+    half = PADDLE_H // 2
+    norm_to_pixel = (HEIGHT // 2 - half) / 2.25
+    norm_speed = node.paddle_speed / norm_to_pixel
+
     node.my_paddle_y = update_client_paddle_position(
         node.my_paddle_y,
         key_up,
         key_down,
-        node.paddle_speed,
+        norm_speed,
         node.limit,
     )
 
-    half = PADDLE_H // 2
     node.paddle2_y = float((HEIGHT // 2) + node.my_paddle_y * ((HEIGHT // 2 - half) / 2.25))
     node.paddle2_y = max(half, min(node.paddle2_y, HEIGHT - half))
     return True

@@ -632,10 +632,6 @@ def draw_network(screen, fonts, host_btn, join_btn, back_btn_local, copy_btn=Non
     title = fonts['medium'].render('Network Multiplayer — Across 2 PCs', True, CYAN)
     screen.blit(title, (WIDTH//2 - title.get_width()//2, 18))
 
-    # Subtitle
-    sub = fonts['tiny'].render('Both PCs must be on the same WiFi or hotspot', True, YELLOW)
-    screen.blit(sub, (WIDTH//2 - sub.get_width()//2, 62))
-
     # IP Address
     host_ip = get_local_ip()
 
