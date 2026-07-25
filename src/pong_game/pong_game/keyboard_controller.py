@@ -1,15 +1,16 @@
+import os
+os.environ.setdefault('RMW_FASTRTPS_USE_SHM', '0')
+os.environ.setdefault('RMW_FASTRTPS_USE_SHARED_MEMORY', '0')
 import rclpy
 from rclpy.node import Node
 from pong_msgs.msg import PongGameState
 import sys
-import os
 import tty
 import termios
 import threading
 
 
 def _configure_ros_transport():
-    os.environ.setdefault('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
     os.environ.setdefault('RMW_FASTRTPS_USE_SHM', '0')
     os.environ.setdefault('RMW_FASTRTPS_USE_SHARED_MEMORY', '0')
 

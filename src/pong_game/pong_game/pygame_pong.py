@@ -1,3 +1,6 @@
+import os
+os.environ.setdefault('RMW_FASTRTPS_USE_SHM', '0')
+os.environ.setdefault('RMW_FASTRTPS_USE_SHARED_MEMORY', '0')
 import rclpy
 from rclpy.node import Node
 from pong_msgs.msg import PongGameState, PongScore
@@ -10,7 +13,6 @@ import time
 import socket
 import subprocess
 import re
-import os
 from pong_game.sound_gen import load_sounds, start_bgm, start_home_bgm, stop_bgm, _SOUND_CACHE
 from pong_game import settings as settings_mod
 
@@ -19,7 +21,6 @@ from pong_game import settings as settings_mod
 # This is applied before rclpy.init().
 
 def _configure_ros_transport():
-    os.environ.setdefault('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
     os.environ.setdefault('RMW_FASTRTPS_USE_SHM', '0')
     os.environ.setdefault('RMW_FASTRTPS_USE_SHARED_MEMORY', '0')
 
