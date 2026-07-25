@@ -95,6 +95,12 @@ class PongClient(Node):
         self.score2      = 0
         self.game_status = 0
 
+        # Network mode / role metadata
+        self._network_mode = True
+        self._network_role = 'CLIENT'
+        self.host_connected = False
+        self.last_host_msg_time = None
+
         # Local paddle control (normalized -2.25 to 2.25)
         self.my_paddle_y  = 0.0
         self.paddle_speed = 0.3  # will be updated dynamically based on ball speed
@@ -112,6 +118,8 @@ class PongClient(Node):
         self.get_logger().info('Controls: W = Up  |  S = Down  |  Q = Quit')
 
     def state_callback(self, msg):
+        self.host_connected = True
+        self.last_host_msg_time = time.time()
         self.ball_x      = msg.ball_x
         self.ball_y      = msg.ball_y
         self.ball_vx     = msg.ball_vel_x
@@ -211,7 +219,7 @@ def update_client_paddle_from_keys(node, pressed_keys):
     # norm_to_pixel = (HEIGHT // 2 - PADDLE_H // 2) / 2.25
     half = PADDLE_H // 2
     norm_to_pixel = (HEIGHT // 2 - half) / 2.25
-    norm_speed = node.paddle_speed / norm_to_pixel
+    norm_speed = node.paddle_speed / norm_to_pixel if node.paddle_speed > 1.0 else node.paddle_speed
 
     node.my_paddle_y = update_client_paddle_position(
         node.my_paddle_y,

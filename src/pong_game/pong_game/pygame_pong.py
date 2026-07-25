@@ -464,18 +464,15 @@ class PongNode(Node):
         except Exception:
             pass
 
-        # Wait for an actual partner paddle message before the HOST starts the match.
-        if self._network_mode and getattr(self, '_network_role', 'HOST') == 'HOST' and self.game_status == 0:
+        # Record partner presence when a paddle message is received from client.
+        if self._network_mode and getattr(self, '_network_role', 'HOST') == 'HOST':
+            if not getattr(self, '_network_partner_seen', False):
+                try:
+                    self.get_logger().info('[Net] Partner connected! Waiting for host to start match.')
+                except Exception:
+                    pass
             self._network_partner_seen = True
             self._client_last_seen = now
-            self._client_paddle_count = 0
-            self._client_last_paddle_time = None
-            try:
-                self.get_logger().info('[Net] Partner message received; starting countdown')
-            except Exception:
-                pass
-            self.game_status = 1
-            self.start_countdown(0)
 
 # ─── Drawing helpers ─────────────────────────────────────
 def draw_card(screen, y, h):
@@ -647,20 +644,57 @@ def draw_game(screen, node, fonts, mode, particles, trail, settings_dict, clock=
             f'FPS: {int(clock.get_fps())}', True, YELLOW)
         screen.blit(fps_surf, (10, 10))
 
-    # Host waiting overlay when in network HOST role and no client yet
-    if mode == 3 and hasattr(node, '_network_role') and getattr(node, '_network_role', 'HOST') == 'HOST' and node.game_status == 0:
+    # Host waiting overlay when in network HOST role and match not yet started (game_status == 0)
+    if mode == 3 and getattr(node, '_network_role', 'HOST') == 'HOST' and getattr(node, 'game_status', 0) == 0:
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 160))
+        overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
-        waiting_txt = fonts['medium'].render('Waiting for your partner to start...', True, YELLOW)
-        screen.blit(waiting_txt, (WIDTH//2 - waiting_txt.get_width()//2, HEIGHT//2 - 20))
 
-    if mode == 3 and hasattr(node, '_network_role') and getattr(node, '_network_role', 'HOST') == 'CLIENT' and node.game_status == 0:
+        partner_seen = getattr(node, '_network_partner_seen', False)
+        client_last_seen = getattr(node, '_client_last_seen', None)
+        is_connected = partner_seen and client_last_seen and (time.time() - client_last_seen < 5.0)
+
+        if is_connected:
+            title_txt = fonts['big'].render('PLAYER 2 CONNECTED!', True, GREEN)
+            screen.blit(title_txt, (WIDTH//2 - title_txt.get_width()//2, HEIGHT//2 - 60))
+            prompt_txt = fonts['medium'].render('Press  [ SPACE ]  or  [ ENTER ]  to Start Match', True, YELLOW)
+            screen.blit(prompt_txt, (WIDTH//2 - prompt_txt.get_width()//2, HEIGHT//2 + 10))
+            sub_txt = fonts['small'].render('Player 2 is ready in lobby', True, WHITE)
+            screen.blit(sub_txt, (WIDTH//2 - sub_txt.get_width()//2, HEIGHT//2 + 70))
+        else:
+            title_txt = fonts['big'].render('WAITING FOR PLAYER 2...', True, CYAN)
+            screen.blit(title_txt, (WIDTH//2 - title_txt.get_width()//2, HEIGHT//2 - 70))
+            ip_str = get_local_ip()
+            ip_txt = fonts['medium'].render(f'Your IP Address: {ip_str}', True, WHITE)
+            screen.blit(ip_txt, (WIDTH//2 - ip_txt.get_width()//2, HEIGHT//2 - 10))
+            instruct_txt = fonts['small'].render('Player 2: Enter this IP or run pong_client', True, YELLOW)
+            screen.blit(instruct_txt, (WIDTH//2 - instruct_txt.get_width()//2, HEIGHT//2 + 40))
+            prompt_txt = fonts['small'].render('Or press  [ SPACE ]  to start game immediately', True, LIGHT_GRAY)
+            screen.blit(prompt_txt, (WIDTH//2 - prompt_txt.get_width()//2, HEIGHT//2 + 90))
+
+    # Client waiting overlay when in network CLIENT role and match not yet started (game_status == 0)
+    if mode == 3 and (getattr(node, '_network_role', 'HOST') == 'CLIENT' or not hasattr(node, '_network_role')) and getattr(node, 'game_status', 0) == 0:
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 160))
+        overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
-        waiting_txt = fonts['medium'].render('Waiting for host to start...', True, YELLOW)
-        screen.blit(waiting_txt, (WIDTH//2 - waiting_txt.get_width()//2, HEIGHT//2 - 20))
+
+        last_host_time = getattr(node, 'last_host_msg_time', None)
+        host_active = (last_host_time is not None) and (time.time() - last_host_time < 5.0)
+
+        if host_active or getattr(node, 'host_connected', False):
+            title_txt = fonts['big'].render('CONNECTED TO HOST!', True, GREEN)
+            screen.blit(title_txt, (WIDTH//2 - title_txt.get_width()//2, HEIGHT//2 - 50))
+            msg_txt = fonts['medium'].render('Waiting for Host to start the match...', True, YELLOW)
+            screen.blit(msg_txt, (WIDTH//2 - msg_txt.get_width()//2, HEIGHT//2 + 10))
+            role_txt = fonts['small'].render('You are Player 2 (RIGHT Paddle - RED)', True, RED)
+            screen.blit(role_txt, (WIDTH//2 - role_txt.get_width()//2, HEIGHT//2 + 65))
+        else:
+            title_txt = fonts['big'].render('WAITING FOR HOST CONNECTION...', True, CYAN)
+            screen.blit(title_txt, (WIDTH//2 - title_txt.get_width()//2, HEIGHT//2 - 60))
+            msg_txt = fonts['medium'].render('Make sure Host PC has launched Host game', True, YELLOW)
+            screen.blit(msg_txt, (WIDTH//2 - msg_txt.get_width()//2, HEIGHT//2 + 10))
+            cmd_txt = fonts['small'].render('ros2 launch pong_game pong.launch.py', True, GREEN)
+            screen.blit(cmd_txt, (WIDTH//2 - cmd_txt.get_width()//2, HEIGHT//2 + 60))
 
     if node.countdown_active:
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -1438,6 +1472,14 @@ def main(args=None):
                         node.reset_game()
                         trail.clear()
                         particles.clear()
+                    if event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                        if getattr(node, '_network_mode', False) and getattr(node, '_network_role', 'HOST') == 'HOST' and node.game_status == 0:
+                            node.game_status = 1
+                            node.start_countdown(0)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if getattr(node, '_network_mode', False) and getattr(node, '_network_role', 'HOST') == 'HOST' and node.game_status == 0:
+                        node.game_status = 1
+                        node.start_countdown(0)
                 elif event.type == pygame.KEYUP:
                     pressed_keys.discard(event.key)
 
