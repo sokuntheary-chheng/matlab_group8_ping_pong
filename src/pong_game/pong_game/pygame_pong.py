@@ -441,9 +441,42 @@ class PongNode(Node):
             pass
 
     def score_callback(self, msg):
+        if getattr(self, '_network_mode', False) and getattr(self, '_network_role', 'HOST') == 'HOST':
+            if msg.event_type == 'restart':
+                self.score1 = 0
+                self.score2 = 0
+                self.speed_mult = 1.0
+                self.game_status = 1
+                self.start_countdown(0)
+                self.publish_score_event(0, 'start', '')
+            elif msg.event_type == 'quit':
+                self.game_status = 0
+                self._network_partner_seen = False
+                self._client_last_seen = None
+
         if getattr(self, '_network_mode', False) and getattr(self, '_network_role', 'HOST') == 'CLIENT':
-            if msg.event_type in ('start', 'score'):
+            if msg.event_type in ('start', 'score', 'restart'):
+                self.score1 = msg.score_player1
+                self.score2 = msg.score_player2
                 self.start_countdown(msg.player_scored)
+
+    def request_restart(self):
+        msg = PongScore()
+        msg.player_scored = 0
+        msg.score_player1 = 0
+        msg.score_player2 = 0
+        msg.event_type = 'restart'
+        msg.winner = ''
+        self.score_pub.publish(msg)
+
+    def request_quit(self):
+        msg = PongScore()
+        msg.player_scored = 0
+        msg.score_player1 = 0
+        msg.score_player2 = 0
+        msg.event_type = 'quit'
+        msg.winner = ''
+        self.score_pub.publish(msg)
 
     def paddle_callback(self, msg):
         """Receive paddle positions from keyboard_controller (network/Across 2 PCs mode).
@@ -479,15 +512,19 @@ class PongNode(Node):
         except Exception:
             pass
 
-        # Record partner presence when a paddle message is received from client.
+        # Auto-start countdown and game when partner paddle message is received from client.
         if self._network_mode and getattr(self, '_network_role', 'HOST') == 'HOST':
             if not getattr(self, '_network_partner_seen', False):
                 try:
-                    self.get_logger().info('[Net] Partner connected! Waiting for host to start match.')
+                    self.get_logger().info('[Net] Partner connected! Auto-starting match countdown.')
                 except Exception:
                     pass
             self._network_partner_seen = True
             self._client_last_seen = now
+            if self.game_status == 0:
+                self.game_status = 1
+                self.start_countdown(0)
+                self.publish_score_event(0, 'start', '')
 
 # ─── Drawing helpers ─────────────────────────────────────
 def draw_card(screen, y, h):
@@ -1479,22 +1516,36 @@ def main(args=None):
             elif state == 'game':
                 if event.type == pygame.KEYDOWN:
                     pressed_keys.add(event.key)
-                    if event.key == pygame.K_ESCAPE:
+                    if event.key in (pygame.K_ESCAPE, pygame.K_q):
+                        if getattr(node, '_network_mode', False) and getattr(node, '_network_role', 'HOST') == 'CLIENT':
+                            try: node.request_quit()
+                            except Exception: pass
                         state = 'home'
                         particles.clear()
                         trail.clear()
-                    if event.key == pygame.K_r:
-                        node.reset_game()
-                        trail.clear()
-                        particles.clear()
-                    if event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                    elif event.key == pygame.K_r:
+                        if getattr(node, '_network_mode', False) and getattr(node, '_network_role', 'HOST') == 'CLIENT':
+                            try: node.request_restart()
+                            except Exception: pass
+                        else:
+                            node.score1 = 0
+                            node.score2 = 0
+                            node.speed_mult = 1.0
+                            node.game_status = 1
+                            node.start_countdown(0)
+                            node.publish_score_event(0, 'start', '')
+                            trail.clear()
+                            particles.clear()
+                    elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
                         if getattr(node, '_network_mode', False) and getattr(node, '_network_role', 'HOST') == 'HOST' and node.game_status == 0:
                             node.game_status = 1
                             node.start_countdown(0)
+                            node.publish_score_event(0, 'start', '')
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if getattr(node, '_network_mode', False) and getattr(node, '_network_role', 'HOST') == 'HOST' and node.game_status == 0:
                         node.game_status = 1
                         node.start_countdown(0)
+                        node.publish_score_event(0, 'start', '')
                 elif event.type == pygame.KEYUP:
                     pressed_keys.discard(event.key)
 

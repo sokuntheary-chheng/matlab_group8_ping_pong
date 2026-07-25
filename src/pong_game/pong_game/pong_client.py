@@ -82,6 +82,10 @@ class PongClient(Node):
         self.pub_paddle = self.create_publisher(
             PongGameState, '/pong/paddle_input', 10)
 
+        # Publisher for score events (restart, quit requests)
+        self.pub_score = self.create_publisher(
+            PongScore, '/pong/score_event', 10)
+
         self.create_timer(0.05, self.publish_paddles)
 
         # Game state received from host
@@ -115,7 +119,7 @@ class PongClient(Node):
         self.last_scorer = 0
 
         self.get_logger().info('Pong Client started! You are Player 2 (RIGHT paddle)')
-        self.get_logger().info('Controls: W = Up  |  S = Down  |  Q = Quit')
+        self.get_logger().info('Controls: W = Up  |  S = Down  |  R = Restart  |  Q = Quit')
 
     def state_callback(self, msg):
         self.host_connected = True
@@ -151,8 +155,28 @@ class PongClient(Node):
     def score_callback(self, msg):
         self.get_logger().info(
             f'Score: {msg.score_player1} - {msg.score_player2}  [{msg.event_type}]')
-        if msg.event_type in ('start', 'score'):
+        if msg.event_type in ('start', 'score', 'restart'):
+            self.score1 = msg.score_player1
+            self.score2 = msg.score_player2
             self.start_countdown(msg.player_scored)
+
+    def request_restart(self):
+        msg = PongScore()
+        msg.player_scored = 0
+        msg.score_player1 = 0
+        msg.score_player2 = 0
+        msg.event_type = 'restart'
+        msg.winner = ''
+        self.pub_score.publish(msg)
+
+    def request_quit(self):
+        msg = PongScore()
+        msg.player_scored = 0
+        msg.score_player1 = 0
+        msg.score_player2 = 0
+        msg.event_type = 'quit'
+        msg.winner = ''
+        self.pub_score.publish(msg)
 
     def start_countdown(self, scorer):
         self.countdown_active = True
@@ -312,11 +336,18 @@ def main(args=None):
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                try: node.request_quit()
+                except Exception: pass
                 running = False
             elif event.type == pygame.KEYDOWN:
                 pressed_keys.add(event.key)
-                if event.key == pygame.K_ESCAPE:
+                if event.key in (pygame.K_ESCAPE, pygame.K_q):
+                    try: node.request_quit()
+                    except Exception: pass
                     running = False
+                elif event.key == pygame.K_r:
+                    try: node.request_restart()
+                    except Exception: pass
                 else:
                     running = handle_pygame_input(event, node)
             elif event.type == pygame.KEYUP:
