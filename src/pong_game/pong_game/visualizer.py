@@ -1,9 +1,16 @@
+import os
 import rclpy
 from rclpy.node import Node
 from pong_msgs.msg import PongGameState
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
 from geometry_msgs.msg import Vector3
+
+
+def _configure_ros_transport():
+    os.environ.setdefault('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
+    os.environ.setdefault('RMW_FASTRTPS_USE_SHM', '0')
+    os.environ.setdefault('RMW_FASTRTPS_USE_SHARED_MEMORY', '0')
 
 class PongVisualizer(Node):
     def __init__(self):
@@ -68,6 +75,7 @@ class PongVisualizer(Node):
             throttle_duration_sec=1.0)
 
 def main(args=None):
+    _configure_ros_transport()
     rclpy.init(args=args)
     node = PongVisualizer()
     rclpy.spin(node)

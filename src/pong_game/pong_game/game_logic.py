@@ -1,7 +1,14 @@
+import os
 import rclpy
 from rclpy.node import Node
 from pong_msgs.msg import PongGameState
 import math
+
+
+def _configure_ros_transport():
+    os.environ.setdefault('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
+    os.environ.setdefault('RMW_FASTRTPS_USE_SHM', '0')
+    os.environ.setdefault('RMW_FASTRTPS_USE_SHARED_MEMORY', '0')
 
 class PongGameLogic(Node):
     def __init__(self):
@@ -103,6 +110,7 @@ class PongGameLogic(Node):
         self.ball_vel_x *= -1
 
 def main(args=None):
+    _configure_ros_transport()
     rclpy.init(args=args)
     node = PongGameLogic()
     rclpy.spin(node)

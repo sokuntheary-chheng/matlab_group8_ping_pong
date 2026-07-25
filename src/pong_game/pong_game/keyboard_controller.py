@@ -7,6 +7,12 @@ import tty
 import termios
 import threading
 
+
+def _configure_ros_transport():
+    os.environ.setdefault('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
+    os.environ.setdefault('RMW_FASTRTPS_USE_SHM', '0')
+    os.environ.setdefault('RMW_FASTRTPS_USE_SHARED_MEMORY', '0')
+
 class KeyboardController(Node):
     def __init__(self):
         super().__init__('keyboard_controller')
@@ -55,6 +61,7 @@ class KeyboardController(Node):
         self.publisher.publish(msg)
 
 def main(args=None):
+    _configure_ros_transport()
     rclpy.init(args=args)
     node = KeyboardController()
     rclpy.spin(node)

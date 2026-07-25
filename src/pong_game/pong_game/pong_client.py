@@ -5,11 +5,18 @@ Subscribes to /pong/game_state and renders the game display.
 Also publishes paddle input via /pong/paddle_input.
 Run this on the Guest PC instead of keyboard_controller.
 """
+import os
 import pygame
 import threading
 import time
 
 from pong_game.network_controls import update_client_paddle_position
+
+
+def _configure_ros_transport():
+    os.environ.setdefault('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
+    os.environ.setdefault('RMW_FASTRTPS_USE_SHM', '0')
+    os.environ.setdefault('RMW_FASTRTPS_USE_SHARED_MEMORY', '0')
 
 try:
     import rclpy
@@ -255,6 +262,7 @@ def draw_waiting(screen, fonts):
 
 
 def main(args=None):
+    _configure_ros_transport()
     rclpy.init(args=args)
     node = PongClient()
 

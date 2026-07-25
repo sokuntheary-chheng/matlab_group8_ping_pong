@@ -14,6 +14,15 @@ import os
 from pong_game.sound_gen import load_sounds, start_bgm, start_home_bgm, stop_bgm, _SOUND_CACHE
 from pong_game import settings as settings_mod
 
+# Always prefer Cyclone DDS / disable Fast DDS shared-memory transport for WSL
+# environments where Fast DDS SHM port locking often fails.
+# This is applied before rclpy.init().
+
+def _configure_ros_transport():
+    os.environ.setdefault('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
+    os.environ.setdefault('RMW_FASTRTPS_USE_SHM', '0')
+    os.environ.setdefault('RMW_FASTRTPS_USE_SHARED_MEMORY', '0')
+
 # Helper: detect local IP in a robust way
 def get_local_ip():
     """Return the most likely local IPv4 address reachable by LAN peers.
@@ -1280,6 +1289,7 @@ def update_game(node, pressed_keys, mode, sounds, particles, trail, settings_dic
 
 # ─── Main ────────────────────────────────────────────────
 def main(args=None):
+    _configure_ros_transport()
     rclpy.init(args=args)
 
     settings = settings_mod.load_settings()
