@@ -20,6 +20,23 @@ class PongVisualizer(Node):
             PongGameState, '/pong/game_state', self.state_callback, 10)
         self.marker_pub = self.create_publisher(MarkerArray, '/pong/markers', 10)
         self.get_logger().info('Pong Visualizer started!')
+        self.get_logger().info('Waiting for /pong/game_state messages from pygame_pong...')
+        self._received_first_message = False
+        # Publish initial empty markers to establish the topic
+        self.publish_initial_markers()
+
+    def publish_initial_markers(self):
+        """Publish initial marker array to establish the topic."""
+        markers = MarkerArray()
+        # Add a default marker to establish the topic
+        m = Marker()
+        m.header.frame_id = 'map'
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.ns = 'pong'
+        m.id = 0
+        m.action = Marker.DELETE_ALL
+        markers.markers.append(m)
+        self.marker_pub.publish(markers)
 
     def make_marker(self, id, x, y, sx, sy, sz, r, g, b):
         m = Marker()
@@ -38,6 +55,10 @@ class PongVisualizer(Node):
         return m
 
     def state_callback(self, msg):
+        if not self._received_first_message:
+            self.get_logger().info('Received first game state! Publishing markers to rviz2...')
+            self._received_first_message = True
+
         markers = MarkerArray()
 
         # Scale pixel coords → rviz2 meters
@@ -72,7 +93,7 @@ class PongVisualizer(Node):
         self.marker_pub.publish(markers)
         self.get_logger().info(
             f'Score: {msg.score_player1} - {msg.score_player2} | '
-            f'Ball: ({msg.ball_x:.1f}, {msg.ball_y:.1f})',
+            f'Ball: ({msg.ball_x:.1f}, {msg.ball_y:.1f}) | Status: {msg.game_status}',
             throttle_duration_sec=1.0)
 
 def main(args=None):

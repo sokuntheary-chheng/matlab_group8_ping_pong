@@ -27,47 +27,79 @@ class KeyboardController(Node):
         self.get_logger().info('Player 1: W/S | Player 2: Arrow Up/Down | Q: Quit')
         self.thread = threading.Thread(target=self.read_keyboard, daemon=True)
         self.thread.start()
+        self._running = True
 
     def read_keyboard(self):
+        """Read keyboard input and update paddle positions."""
+        if not sys.stdin.isatty():
+            self.get_logger().warning('Not running in terminal — keyboard input not available')
+            return
+            
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
-            while True:
-                ch = os.read(fd, 1)
-                if ch == b'w':
-                    self.paddle1_y = min(self.paddle1_y + self.paddle_speed, self.limit)
-                    self.get_logger().info(f'P1 up: {self.paddle1_y:.2f}')
-                elif ch == b's':
-                    self.paddle1_y = max(self.paddle1_y - self.paddle_speed, -self.limit)
-                    self.get_logger().info(f'P1 down: {self.paddle1_y:.2f}')
-                elif ch == b'\x1b':
-                    ch2 = os.read(fd, 1)
-                    ch3 = os.read(fd, 1)
-                    if ch2 == b'[' and ch3 == b'A':
-                        self.paddle2_y = min(self.paddle2_y + self.paddle_speed, self.limit)
-                        self.get_logger().info(f'P2 up: {self.paddle2_y:.2f}')
-                    elif ch2 == b'[' and ch3 == b'B':
-                        self.paddle2_y = max(self.paddle2_y - self.paddle_speed, -self.limit)
-                        self.get_logger().info(f'P2 down: {self.paddle2_y:.2f}')
-                elif ch == b'q':
+            while self._running:
+                try:
+                    ch = os.read(fd, 1)
+                    if not ch:
+                        break
+                    if ch == b'w':
+                        self.paddle1_y = min(self.paddle1_y + self.paddle_speed, self.limit)
+                        self.get_logger().info(f'P1 up: {self.paddle1_y:.2f}', throttle_duration_sec=0.1)
+                    elif ch == b's':
+                        self.paddle1_y = max(self.paddle1_y - self.paddle_speed, -self.limit)
+                        self.get_logger().info(f'P1 down: {self.paddle1_y:.2f}', throttle_duration_sec=0.1)
+                    elif ch == b'\x1b':
+                        ch2 = os.read(fd, 1)
+                        if ch2:
+                            ch3 = os.read(fd, 1)
+                            if ch2 == b'[' and ch3 == b'A':
+                                self.paddle2_y = min(self.paddle2_y + self.paddle_speed, self.limit)
+                                self.get_logger().info(f'P2 up: {self.paddle2_y:.2f}', throttle_duration_sec=0.1)
+                            elif ch2 == b'[' and ch3 == b'B':
+                                self.paddle2_y = max(self.paddle2_y - self.paddle_speed, -self.limit)
+                                self.get_logger().info(f'P2 down: {self.paddle2_y:.2f}', throttle_duration_sec=0.1)
+                    elif ch == b'q':
+                        self.get_logger().info('Quit command received')
+                        break
+                except (OSError, IOError):
                     break
+        except Exception as e:
+            self.get_logger().error(f'Keyboard read error: {e}')
         finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+            try:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old)
+            except:
+                pass
+            self._running = False
 
     def publish_paddles(self):
+        """Publish paddle positions as game state message."""
         msg = PongGameState()
         msg.paddle1_y = self.paddle1_y
         msg.paddle2_y = self.paddle2_y
+        msg.ball_x = 0.0
+        msg.ball_y = 0.0
+        msg.ball_vel_x = 0.0
+        msg.ball_vel_y = 0.0
+        msg.score_player1 = 0
+        msg.score_player2 = 0
+        msg.game_status = 0
         self.publisher.publish(msg)
 
 def main(args=None):
     _configure_ros_transport()
     rclpy.init(args=args)
     node = KeyboardController()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node._running = False
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
