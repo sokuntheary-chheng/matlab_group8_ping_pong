@@ -323,15 +323,17 @@ class PongNode(Node):
         self.score1      = 0
         self.score2      = 0
         self.speed_mult  = 1.0
-        # Networked mode: HOST starts match countdown on reset; CLIENT waits for HOST state
-        if self._network_mode and getattr(self, '_network_role', 'HOST') == 'CLIENT':
-            self.game_status = 0
+        # Networked mode: both HOST and CLIENT should show waiting until the Host detects partner / starts match
+        if self._network_mode:
+            self.game_status = 0  # 0 = waiting for partner / waiting for host to start
+            self._client_last_seen = None
+            self._client_paddle_count = 0  # reset heartbeat counter
+            self._client_last_paddle_time = None  # reset heartbeat timer
+            self._network_partner_seen = False
+            self.publish_score_event(0, 'start', '')
         else:
+            # Local (non-network) behavior: start immediately
             self.game_status = 1
-            self._client_last_seen = time.time()
-            self._client_paddle_count = 0
-            self._client_last_paddle_time = None
-            self._network_partner_seen = True
             self.publish_score_event(0, 'start', '')
             self.start_countdown(0)
 
