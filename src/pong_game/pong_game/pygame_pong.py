@@ -510,19 +510,15 @@ class PongNode(Node):
         except Exception:
             pass
 
-        # Auto-start countdown and game when partner paddle message is received from client.
+        # Record partner presence when paddle message is received from client.
         if self._network_mode and getattr(self, '_network_role', 'HOST') == 'HOST':
             if not getattr(self, '_network_partner_seen', False):
                 try:
-                    self.get_logger().info('[Net] Partner connected! Auto-starting match countdown.')
+                    self.get_logger().info('[Net] Partner connected! Ready for Host to start match.')
                 except Exception:
                     pass
             self._network_partner_seen = True
             self._client_last_seen = now
-            if self.game_status == 0:
-                self.game_status = 1
-                self.start_countdown(0)
-                self.publish_score_event(0, 'start', '')
 
 # ─── Drawing helpers ─────────────────────────────────────
 def draw_card(screen, y, h):
