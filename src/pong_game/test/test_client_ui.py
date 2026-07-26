@@ -63,3 +63,14 @@ def test_client_draw_game_uses_host_renderer(monkeypatch):
     assert called['trail'] == trail
     assert called['settings_dict'] is settings_dict
     assert called['clock'] is None
+
+
+def test_pygame_pong_client_update_game():
+    from pong_game import pygame_pong
+    node = types.SimpleNamespace(
+        ball_vx=2.0, ball_vy=1.0, my_paddle_y=0.0, limit=2.25,
+        paddle2_y=0.0, speed_mult=1.0, countdown_active=False, _network_role='CLIENT'
+    )
+    pygame_pong.update_game(node, set(), mode=3, sounds={}, particles=[], trail=[], settings_dict={}, dt=0.016)
+    assert hasattr(node, 'my_paddle_y')
+

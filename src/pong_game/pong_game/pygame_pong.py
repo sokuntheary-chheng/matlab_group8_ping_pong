@@ -15,6 +15,7 @@ import subprocess
 import re
 from pong_game.sound_gen import load_sounds, start_bgm, start_home_bgm, stop_bgm, _SOUND_CACHE
 from pong_game import settings as settings_mod
+from pong_game.network_controls import update_client_paddle_position
 
 # Always prefer Cyclone DDS / disable Fast DDS shared-memory transport for WSL
 # environments where Fast DDS SHM port locking often fails.
