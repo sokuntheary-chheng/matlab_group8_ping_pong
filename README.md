@@ -36,6 +36,7 @@
 - [Custom Messages](#-custom-messages)
 - [Requirements](#-requirements)
 - [Installation](#-installation)
+- [Quick Start](#-quick-start)
 - [How to Play](#-how-to-play)
 - [Settings](#-settings)
 - [Project Structure](#-project-structure)
@@ -226,7 +227,78 @@ source ~/.bashrc
 ### Step 7: Run the game 🎮
 ```bash
 ros2 run pong_game pygame_pong
-````
+```
+
+---
+
+## 🚀 Quick Start
+
+This project uses 3 ROS 2 nodes and 4 topics to run the game:
+
+- `pygame_pong` — the main game engine and GUI
+- `keyboard_controller` — publishes paddle input
+- `visualizer` — publishes rviz2 markers from the game state
+
+### Topics
+- `/pong/game_state` — game state updates from `pygame_pong`
+- `/pong/paddle_input` — paddle input from `keyboard_controller`
+- `/pong/score_event` — score and win events from `pygame_pong`
+- `/pong/markers` — visualization markers from `visualizer`
+
+### Recommended startup order
+Open 3 separate terminals and run them in this order:
+
+Terminal 1 — start the game engine first:
+```bash
+cd ~/ros2_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
+export RMW_FASTRTPS_USE_SHM=0
+export RMW_FASTRTPS_USE_SHARED_MEMORY=0
+export RMW_LOG_LEVEL=FATAL
+export DISPLAY=:0
+ros2 run pong_game pygame_pong
+```
+
+Wait a few seconds for the window to appear.
+
+Terminal 2 — start keyboard input:
+```bash
+cd ~/ros2_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
+export RMW_FASTRTPS_USE_SHM=0
+export RMW_FASTRTPS_USE_SHARED_MEMORY=0
+export RMW_LOG_LEVEL=FATAL
+ros2 run pong_game keyboard_controller
+```
+
+Terminal 3 — start the visualizer:
+```bash
+cd ~/ros2_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+export ROS_DOMAIN_ID=30
+export RMW_FASTRTPS_USE_SHM=0
+export RMW_FASTRTPS_USE_SHARED_MEMORY=0
+export RMW_LOG_LEVEL=FATAL
+ros2 run pong_game visualizer
+```
+
+### Helpful verification commands
+```bash
+ros2 node list
+ros2 topic list
+ros2 topic hz /pong/game_state
+```
+
+If you want a quick shell helper, use:
+```bash
+bash RUN_GAME.sh
+bash VERIFY_SETUP.sh
+```
 
 ---
 
@@ -369,21 +441,60 @@ src/
 
 ## 🔧 Troubleshooting
 
-### Game window does not appear (WSL2)
+### 1. Game window does not appear
+If the game window does not open, the most common cause is that `DISPLAY` is not set correctly.
+
 ```bash
-# Make sure DISPLAY is set
 echo $DISPLAY
-# Should show :0 or similar
-# If empty, install an X server like VcXsrv or use Windows 11 WSLg
+# Expected: :0, :1, or another X display value
+
+# If it is empty, try:
+export DISPLAY=:0
 ```
 
-### ROS 2 not found
+If you are using WSL2, you may need an X server such as VcXsrv or Windows 11 WSLg.
+
+### 2. Visualizer does not show anything
+The visualizer waits for game state messages from `pygame_pong`. Start the game first, then start the visualizer.
+
+```bash
+# Terminal 1
+ros2 run pong_game pygame_pong
+
+# Wait a few seconds, then:
+# Terminal 2
+ros2 run pong_game visualizer
+```
+
+### 3. Keyboard controller is not responding
+Make sure the terminal running `keyboard_controller` is focused and interactive.
+
+```bash
+# Try these keys:
+# W / S -> Player 1 paddle
+# Arrow Up / Arrow Down -> Player 2 paddle
+# Q -> quit
+```
+
+### 4. Nodes do not communicate
+If the nodes are not seeing each other, check the ROS environment variables on every terminal.
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/ros2_ws/install/setup.bash
+export ROS_DOMAIN_ID=30
+export RMW_FASTRTPS_USE_SHM=0
+export RMW_FASTRTPS_USE_SHARED_MEMORY=0
+export RMW_LOG_LEVEL=FATAL
+```
+
+### 5. ROS 2 is not found
 ```bash
 source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
 ```
 
-### Build fails — pong_msgs not found
+### 6. Build fails with `pong_msgs` not found
 ```bash
 cd ~/ros2_ws
 colcon build --packages-select pong_msgs
@@ -392,34 +503,50 @@ colcon build --packages-select pong_game
 source install/setup.bash
 ```
 
-### pygame AVX2 warning
-This is just a warning, not an error. The game runs fine.
+### 7. pygame AVX2 warning
+This warning is harmless and does not stop the game from running.
 
-### Network mode ? Guest paddle not responding
-This can happen if the heartbeat threshold has not been reached yet. Ensure:
-1. Both PCs are on the same WiFi network
-2. Run on BOTH PCs before launching:
-   \\ash
-   export ROS_DOMAIN_ID=0
-   source ~/ros2_ws/install/setup.bash
-   \3. CLIENT must send at least 3 paddle input messages within 1 second to complete handshake
-4. Check terminal logs for heartbeat progress: [Net] Heartbeat 1/3, [Net] Heartbeat 2/3, [Net] Heartbeat 3/3
-5. Verify on-screen debug overlay shows correct role (HOST or CLIENT) and last-seen/last-sent timestamps
-6. If still not working, see the Verify ROS 2 topics section below
+### 8. Network mode: guest paddle does not respond
+This usually means the handshake has not completed yet. Make sure:
+1. Both PCs are on the same network
+2. Both terminals use the same `ROS_DOMAIN_ID`
+3. The host and client both source the workspace before launching
+4. The client sends paddle input messages so the host can confirm the connection
 
-### Verify ROS 2 topics are active
+```bash
+export ROS_DOMAIN_ID=0
+source ~/ros2_ws/install/setup.bash
+```
+
+### 9. Shared-memory DDS errors in WSL2
+These `RTPS_TRANSPORT_SHM` warnings are common in WSL2. They are usually not fatal. The game should still work if the environment variables are set correctly:
+
+```bash
+export RMW_FASTRTPS_USE_SHM=0
+export RMW_FASTRTPS_USE_SHARED_MEMORY=0
+```
+
+### 10. Verify topics are active
 ```bash
 ros2 topic list
-# Should show: /pong/game_state /pong/paddle_input /pong/score_event /pong/markers
+# Expected topics:
+# /pong/game_state
+# /pong/paddle_input
+# /pong/score_event
+# /pong/markers
 
 ros2 topic hz /pong/game_state
-# Should show ~20 Hz
+# Expected: roughly 20 Hz while the game is running
+```
+
+### 11. Quick verification script
+```bash
+bash VERIFY_SETUP.sh
 ```
 
 ---
 
 ## 📊 Performance
-
 | Metric | Value |
 |---|---|
 | Game update rate | 20 Hz |

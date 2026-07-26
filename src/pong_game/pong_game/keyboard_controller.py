@@ -25,9 +25,10 @@ class KeyboardController(Node):
         self.timer = self.create_timer(0.05, self.publish_paddles)
         self.get_logger().info('Keyboard Controller started!')
         self.get_logger().info('Player 1: W/S | Player 2: Arrow Up/Down | Q: Quit')
+        # mark running before starting the keyboard thread to avoid a race
+        self._running = True
         self.thread = threading.Thread(target=self.read_keyboard, daemon=True)
         self.thread.start()
-        self._running = True
 
     def read_keyboard(self):
         """Read keyboard input and update paddle positions."""

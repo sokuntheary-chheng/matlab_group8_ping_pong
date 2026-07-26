@@ -34,7 +34,7 @@ class PongVisualizer(Node):
         m.header.stamp = self.get_clock().now().to_msg()
         m.ns = 'pong'
         m.id = 0
-        m.action = Marker.DELETE_ALL
+        m.action = Marker.DELETEALL
         markers.markers.append(m)
         self.marker_pub.publish(markers)
 
