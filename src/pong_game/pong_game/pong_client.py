@@ -104,6 +104,7 @@ class PongClient(Node):
         self._network_role = 'CLIENT'
         self.host_connected = False
         self.last_host_msg_time = None
+        self._last_host_game_status = 0
 
         # Local paddle control (normalized -2.25 to 2.25)
         self.my_paddle_y  = 0.0
@@ -133,6 +134,7 @@ class PongClient(Node):
         self.score1      = msg.score_player1
         self.score2      = msg.score_player2
         
+        self._last_host_game_status = self.game_status
         prev_status = self.game_status
         self.game_status = msg.game_status
         if prev_status == 0 and self.game_status == 1 and not self.countdown_active:
@@ -355,11 +357,23 @@ def main(args=None):
 
         if node.game_status == 1 or node.countdown_active:
             update_client_paddle_from_keys(node, pressed_keys)
+        
+        # BUG 1: Failsafe for client to start game if host already started
+        if node.host_connected and node.game_status == 0 and node.last_host_msg_time is not None and (time.time() - node.last_host_msg_time < 1.0):
+            if getattr(node, '_last_host_game_status', 0) == 1:
+                node.game_status = 1
 
         if node.countdown_active:
             node.update_countdown(dt)
 
         draw_game(screen, node, fonts, particles, trail, settings, clock)
+        
+        # BUG 3: Connection lost overlay
+        if node.last_host_msg_time is not None and (time.time() - node.last_host_msg_time > 3.0):
+            lost_txt = fonts['big'].render('CONNECTION LOST', True, RED)
+            screen.blit(lost_txt, (WIDTH // 2 - lost_txt.get_width() // 2, HEIGHT // 2 - 40))
+            pygame.display.flip()
+
         clock.tick(FPS)
 
     pygame.quit()
